@@ -14,7 +14,7 @@ import { ClosePatientsUseCase } from "domain/usecases/ClosePatientsUseCase";
 export function getCommand() {
     return subcommands({
         name: "programs",
-        cmds: { "close-patients-script": closePatientsCmd },
+        cmds: { "close-patients": closePatientsCmd },
     });
 }
 
