@@ -1,13 +1,13 @@
 import path from "path";
 import { run, subcommands } from "cmd-ts";
 
-import * as closePatients from "./commands/close-patients";
+import * as closePatients from "./commands/patients";
 
 export function runCli() {
     const cliSubcommands = subcommands({
         name: path.basename(__filename),
         cmds: {
-            "close-patients": closePatients.getCommand(),
+            patients: closePatients.getCommand(),
         },
     });
 

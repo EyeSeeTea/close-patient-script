@@ -10,7 +10,7 @@ export interface ClosePatientsOptions {
     orgUnitsIds?: Id[];
     period?: Pair;
     programId: Id;
-    programStagesIds: Id[];
+    programStageIds: Id[];
     closureProgramId: Id;
     timeOfReference: string;
     pairsDeValue: Pair[];
