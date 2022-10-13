@@ -69,7 +69,7 @@ const closePatientsCmd = command({
     },
     handler: async args => {
         if (_.isEmpty(args.programStageIds)) throw new Error("Missing program stages IDs");
-        if (_.isEmpty(args.pairsDeValue)) throw new Error("Missing program stages IDs");
+        if (_.isEmpty(args.pairsDeValue)) throw new Error("Missing Pairs DE-Value");
         const api = getD2Api(args.url);
         const programsRepository = new ProgramsD2Repository(api);
         new ClosePatientsUseCase(programsRepository).execute(_.omit(args, ["url"]));

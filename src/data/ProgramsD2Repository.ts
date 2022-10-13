@@ -21,7 +21,7 @@ export class ProgramsD2Repository implements ProgramsRepository {
             comments,
         } = options;
 
-        const trackedEntitiesWithoutClosure$ = this.api
+        const eventsByConsultationProgramStageFromTrackedEntitiesWithoutClosure$ = this.api
             .get<{ instances: { enrollment: string }[] }>("/tracker/events", {
                 program: programId,
                 programStage: closureProgramId,
@@ -47,50 +47,65 @@ export class ProgramsD2Repository implements ProgramsRepository {
                             .map(instance => instance.trackedEntity);
                     });
                 return trackedEntitiesWithoutClosure$;
-            });
-        // //the use case is automatically closing "lost to follow-up" patients    //each tei is a patient. with type sD7b8KtOogp
-        // // const z = this.api.get("/programs/ORvg6A5ed7z", {});
-        // // z.getData().then((y: any) => console.log(y));
-        // const enrollments$ = this.api
-        //     .get<{ instances: object[] }>("/tracker/enrollments", {
-        //         program: programId,
-        //         orgUnit: orgUnitsIds?.join(";"),
-        //         ouMode: orgUnitsIds ? "SELECTED" : "ALL",
-        //         totalPages: true,
-        //     })
-        //     .map(({ data }) => {
-        //         return data.instances;
-        //     });
-        // const patients$ = this.api
-        //     .get<{ instances: object[] }>("/tracker/trackedEntities", {
-        //         program: programId,
-        //         orgUnit: orgUnitsIds?.join(";"),
-        //         ouMode: orgUnitsIds ? "SELECTED" : "ALL",
-        //         totalPages: true,
-        //     })
-        //     .map(({ data }) => {
-        //         return data.instances;
-        //     });
+            })
+            .map(({ data }) =>
+                Promise.all(
+                    //Promise from each teiId with each promise
+                    data.map(teiId =>
+                        Promise.all(
+                            //Promise from each event with teiId and each consultation program stage
+                            programStageIds
+                                .map(id =>
+                                    this.api.get<{ instances: { enrollment: string }[] }>("/tracker/events", {
+                                        program: programId,
+                                        programStage: id,
+                                        trackedEntity: teiId,
+                                        orgUnit: orgUnitsIds?.join(";"),
+                                        ouMode: orgUnitsIds ? "SELECTED" : "ALL",
+                                        totalPages: true,
+                                    })
+                                )
+                                .map(event$ => event$.getData())
+                        )
+                    )
+                )
+            );
 
-        // const enrollments$ = this.api.get("/tracker/enrollments", {
-        //     // trackedEntityType: "sD7b8KtOogp",
-        //     program: "ORvg6A5ed7z",
-        //     // programStage: "XuThsezwYbZ",
-        //     // ouMode: "ALL",
-        //     orgUnit: "bDx6cyWahq4",
-        // });
-        trackedEntitiesWithoutClosure$.getData().then((y: any) => {
-            log(Log.fg.yellow, "PRINTING TRACKED ENTITIES WITHOUT CLOSURES");
+        const eventsFromConsultationProgramStages$ = programStageIds.map(id =>
+            this.api
+                .get<{ instances: { enrollment: string; scheduledAt: string }[] }>("/tracker/events", {
+                    program: programId,
+                    programStage: id,
+                    orgUnit: orgUnitsIds?.join(";"),
+                    ouMode: orgUnitsIds ? "SELECTED" : "ALL",
+                    totalPages: true,
+                })
+                .map(({ data }) => data.instances.map(instance => instance.scheduledAt))
+        );
+
+        const eventsFromConsultationProgramStages = Promise.all(
+            eventsFromConsultationProgramStages$.map(event$ => event$.getData())
+        );
+
+        const events = eventsByConsultationProgramStageFromTrackedEntitiesWithoutClosure$.getData();
+        events
+            .then(p => p)
+            .then(y => {
+                log(
+                    Log.fg.yellow,
+                    "PRINTING EVENTS WITH SPECIFIC CONSULTATION PROGRAM STAGES OF EACH TRACKED ENTITY WITHOUT CLOSURES"
+                );
+                y.forEach(teiEvents =>
+                    teiEvents.forEach(eventsByConsultationProgramStage =>
+                        console.log(eventsByConsultationProgramStage)
+                    )
+                );
+            });
+
+        eventsFromConsultationProgramStages.then((y: any) => {
+            log(Log.fg.yellow, "PRINTING EVENTS FROM CONSULTATION PROGRAM STAGES");
             console.log(y);
         });
-        // patients$.getData().then((y: any) => {
-        //     log(Log.fg.yellow, "PRINTING PATIENTS");
-        //     console.log(y);
-        // });
-        // closures$.getData().then((y: any) => {
-        //     log(Log.fg.yellow, "PRINTING CLOSURES");
-        //     console.log(y);
-        // });
     }
 
     private async getFromTracker(programIds: string[]) {
