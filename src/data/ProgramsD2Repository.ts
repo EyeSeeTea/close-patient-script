@@ -12,6 +12,9 @@ export class ProgramsD2Repository implements ProgramsRepository {
         console.log(api.baseUrl);
         console.log(api.apiConnection);
         console.log(api.get<{ trackedEntityTypes: Ref[] }>("/organisationUnits").response());
+        api.get<{ trackedEntityTypes: Ref[] }>("/organisationUnits")
+            .response()
+            .then(x => console.log(x));
         var promise = new Promise(async function (resolve, reject) {
             const x = await api.get<{ trackedEntityTypes: Ref[] }>("/organisationUnits").response();
             resolve(x);
