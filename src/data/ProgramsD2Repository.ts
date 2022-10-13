@@ -1,42 +1,13 @@
 import _ from "lodash";
-import { Async } from "domain/entities/Async";
-import { Ref } from "domain/entities/Base";
 import { ClosePatientsOptions, ProgramsRepository } from "domain/repositories/ProgramsRepository";
+import { Async } from "domain/entities/Async";
 import { D2Api } from "types/d2-api";
-import { Maybe } from "utils/ts-utils";
+import { log, Log } from "utils/log";
 
 export class ProgramsD2Repository implements ProgramsRepository {
-    private teiPatientType: Maybe<Ref>;
+    constructor(private api: D2Api) {}
 
-    constructor(private api: D2Api) {
-        console.log(api.baseUrl);
-        console.log(api.apiConnection);
-        console.log(api.get<{ trackedEntityTypes: Ref[] }>("/organisationUnits").response());
-        api.get<{ trackedEntityTypes: Ref[] }>("/organisationUnits")
-            .response()
-            .then(x => console.log(x));
-        var promise = new Promise(async function (resolve, reject) {
-            const x = await api.get<{ trackedEntityTypes: Ref[] }>("/organisationUnits").response();
-            resolve(x);
-        });
-        promise.then(x => console.log(x));
-        const patientType$ = api
-            .get<{ trackedEntityTypes: Ref[] }>("/trackedEntityTypes", {
-                // filter: `name:eq:Patient`,
-            })
-            .getData();
-        patientType$
-            .then(({ trackedEntityTypes: teiTypes }) => {
-                console.log("x");
-                const teiType = _.first(teiTypes);
-                if (!teiType) throw new Error("Tracked Entity Type with name 'Patient' not found");
-                this.teiPatientType = teiType;
-                console.log(JSON.stringify(this.teiPatientType));
-            })
-            .catch(err => {
-                throw new Error(err);
-            });
-    }
+    //First of all we need the patients that don't have a closure
 
     async closePatients(options: ClosePatientsOptions): Async<void> {
         const {
@@ -49,111 +20,107 @@ export class ProgramsD2Repository implements ProgramsRepository {
             pairsDeValue,
             comments,
         } = options;
-        if (this.teiPatientType)
-            this.api.trackedEntityInstances
-                .get({
-                    trackedEntityType: this.teiPatientType.id,
-                    ouMode: "ALL",
-                    totalPages: true,
-                })
-                .map(res => console.log(JSON.stringify(res.data.trackedEntityInstances)));
+
+        const trackedEntitiesWithoutClosure$ = this.api
+            .get<{ instances: { enrollment: string }[] }>("/tracker/events", {
+                program: programId,
+                programStage: closureProgramId,
+                orgUnit: orgUnitsIds?.join(";"),
+                ouMode: orgUnitsIds ? "SELECTED" : "ALL",
+                totalPages: true,
+            })
+            .flatMap(({ data }) => {
+                const enrollmentsWithClosure = data.instances.map(({ enrollment }) => enrollment);
+                const trackedEntitiesWithoutClosure$ = this.api
+                    .get<{ instances: { enrollment: string; trackedEntity: string }[] }>(
+                        "/tracker/enrollments",
+                        {
+                            program: programId,
+                            orgUnit: orgUnitsIds?.join(";"),
+                            ouMode: orgUnitsIds ? "SELECTED" : "ALL",
+                            totalPages: true,
+                        }
+                    )
+                    .map(({ data }) => {
+                        return data.instances
+                            .filter(instance => !enrollmentsWithClosure.includes(instance.enrollment))
+                            .map(instance => instance.trackedEntity);
+                    });
+                return trackedEntitiesWithoutClosure$;
+            });
+        // //the use case is automatically closing "lost to follow-up" patients    //each tei is a patient. with type sD7b8KtOogp
+        // // const z = this.api.get("/programs/ORvg6A5ed7z", {});
+        // // z.getData().then((y: any) => console.log(y));
+        // const enrollments$ = this.api
+        //     .get<{ instances: object[] }>("/tracker/enrollments", {
+        //         program: programId,
+        //         orgUnit: orgUnitsIds?.join(";"),
+        //         ouMode: orgUnitsIds ? "SELECTED" : "ALL",
+        //         totalPages: true,
+        //     })
+        //     .map(({ data }) => {
+        //         return data.instances;
+        //     });
+        // const patients$ = this.api
+        //     .get<{ instances: object[] }>("/tracker/trackedEntities", {
+        //         program: programId,
+        //         orgUnit: orgUnitsIds?.join(";"),
+        //         ouMode: orgUnitsIds ? "SELECTED" : "ALL",
+        //         totalPages: true,
+        //     })
+        //     .map(({ data }) => {
+        //         return data.instances;
+        //     });
+
+        // const enrollments$ = this.api.get("/tracker/enrollments", {
+        //     // trackedEntityType: "sD7b8KtOogp",
+        //     program: "ORvg6A5ed7z",
+        //     // programStage: "XuThsezwYbZ",
+        //     // ouMode: "ALL",
+        //     orgUnit: "bDx6cyWahq4",
+        // });
+        trackedEntitiesWithoutClosure$.getData().then((y: any) => {
+            log(Log.fg.yellow, "PRINTING TRACKED ENTITIES WITHOUT CLOSURES");
+            console.log(y);
+        });
+        // patients$.getData().then((y: any) => {
+        //     log(Log.fg.yellow, "PRINTING PATIENTS");
+        //     console.log(y);
+        // });
+        // closures$.getData().then((y: any) => {
+        //     log(Log.fg.yellow, "PRINTING CLOSURES");
+        //     console.log(y);
+        // });
     }
 
-    // async export(options: { ids: Id[] }): Async<ProgramExport> {
-    //     const programIds = options.ids;
-    //     const metadata = await this.getMetadata(programIds);
-    //     const events = await this.getFromTracker("events", programIds);
-    //     const enrollments = await this.getFromTracker("enrollments", programIds);
-    //     const trackedEntities = await this.getFromTracker("trackedEntities", programIds);
+    private async getFromTracker(programIds: string[]) {
+        const output = [];
 
-    //     return {
-    //         metadata,
-    //         data: { events, enrollments, trackedEntities },
-    //     };
-    // }
+        for (const programId of programIds) {
+            let page = 1;
+            let dataRemaining = true;
 
-    // private async getMetadata(programIds: string[]) {
-    //     const responses = await promiseMap(programIds, programId =>
-    //         this.api.get<MetadataRes>(`/programs/${programId}/metadata.json`).getData()
-    //     );
+            while (dataRemaining) {
+                // TODO: Implement in d2-api -> GET api.tracker.{events,enrollments,trackedEntities}
+                const { instances } = await this.api
+                    .get<{ instances: object[] }>(`/tracker/$$`, {
+                        page,
+                        pageSize: 10e3,
+                        ouMode: "ALL",
+                        fields: "*",
+                        program: programId,
+                    })
+                    .getData();
 
-    //     const keys = _(responses).flatMap(_.keys).uniq().difference(["date"]).value();
-    //     const metadata = _(keys)
-    //         .map(key => {
-    //             const value = _(responses)
-    //                 .flatMap(res => res[key] || [])
-    //                 .uniqBy(obj => obj.id)
-    //                 .value();
+                if (instances.length === 0) {
+                    dataRemaining = false;
+                } else {
+                    output.push(...instances);
+                    page++;
+                }
+            }
+        }
 
-    //             return [key, value];
-    //         })
-    //         .fromPairs()
-    //         .value();
-    //     return metadata;
-    // }
-
-    // async import(programExport: ProgramExport): Async<void> {
-    //     const metadataRes = await runMetadata(this.api.metadata.post(programExport.metadata));
-    //     log.info(`Import metadata
-
-    //     log.info("Import data
-    //     const data1 = _.pick(programExport.data, ["enrollments", "trackedEntities"]);
-    //     await this.postTracker(data1);
-
-    //     for (const events of _.chunk(programExport.data.events, 1000)) {
-    //         log.info("Import data
-    //         await this.postTracker({ events });
-    //     }
-    // }
-
-    // async runRules(options: RunRulesOptions): Async<void> {
-    //     const d2ProgramRules = new D2ProgramRules(this.api);
-    //     return d2ProgramRules.run(options);
-    // }
-
-    // /* Private */
-
-    // private async postTracker(data: object): Async<TrackerResponse> {
-    //     // TODO: Implement in d2-api -> POST api.tracker.post
-    //     const res = await this.api.post<TrackerResponse>("/tracker", { async
-    //     log.debug(res.status);
-
-    //     if (res.status !== "OK") {
-    //         console.error(JSON.stringify(res.typeReports, null, 4));
-    //         return res;
-    //     } else {
-    //         return res;
-    //     }
-    // }
-
-    // private async getFromTracker(apiPath: string, programIds: string[]): Promise<object[]> {
-    //     const output = [];
-
-    //     for (const programId of programIds) {
-    //         let page = 1;
-    //         let dataRemaining = true;
-
-    //         while (dataRemaining) {
-    //             // TODO: Implement in d2-api -> GET api.tracker.{events,enrollments,trackedEntities}
-    //             const { instances } = await this.api
-    //                 .get<{ instances: object[] }>(`/tracker/${apiPath}`, {
-    //                     page,
-    //                     pageSize: 10e3,
-    //                     ouMode: "ALL",
-    //                     fields: "*",
-    //                     program: programId,
-    //                 })
-    //                 .getData();
-
-    //             if (instances.length === 0) {
-    //                 dataRemaining = false;
-    //             } else {
-    //                 output.push(...instances);
-    //                 page++;
-    //             }
-    //         }
-    //     }
-
-    //     return output;
-    // }
+        return output;
+    }
 }
