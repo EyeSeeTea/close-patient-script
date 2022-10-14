@@ -5,7 +5,6 @@ import {
     getApiUrlOption,
     getD2Api,
     StringPairsByDashSeparatedByCommas,
-    StringPairSeparatedByDash,
     StringsSeparatedByCommas,
 } from "scripts/common";
 import { ProgramsD2Repository } from "data/ProgramsD2Repository";
@@ -24,25 +23,28 @@ const closePatientsCmd = command({
     args: {
         url: getApiUrlOption(),
         orgUnitsIds: option({
-            //or all if not defined
             type: optional(StringsSeparatedByCommas),
             long: "org-units-ids",
             description: "List of organisation units to filter (comma-separated)",
         }),
-        period: option({
-            //or all if not defined filter in relation to enrollments and take all the data associated to the enrollments to guarantee data completeness)
-            type: optional(StringPairSeparatedByDash), //what format should follow?
-            long: "period",
-            description: "Start date and end date (dash-separated)",
+        startDate: option({
+            type: optional(string),
+            long: "start-date",
+            description: "Start date of period to filter",
+        }),
+        endDate: option({
+            type: optional(string),
+            long: "end-date",
+            description: "Start date of period to filter",
         }),
         programId: option({
             type: string,
             long: "tracker-program-id",
             description: "Tracker program reference ID",
         }),
-        programStageIds: option({
+        programStagesIds: option({
             type: StringsSeparatedByCommas,
-            long: "program-stage-ids",
+            long: "program-stages-ids",
             description: "List of consultation program stages ID1,ID2[,IDN] (comma-separated)",
         }),
         closureProgramId: option({
@@ -68,7 +70,7 @@ const closePatientsCmd = command({
         }),
     },
     handler: async args => {
-        if (_.isEmpty(args.programStageIds)) throw new Error("Missing program stages IDs");
+        if (_.isEmpty(args.programStagesIds)) throw new Error("Missing program stages IDs");
         if (_.isEmpty(args.pairsDeValue)) throw new Error("Missing Pairs DE-Value");
         const api = getD2Api(args.url);
         const programsRepository = new ProgramsD2Repository(api);

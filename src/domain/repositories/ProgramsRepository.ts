@@ -8,9 +8,10 @@ export interface ProgramsRepository {
 
 export interface ClosePatientsOptions {
     orgUnitsIds?: Id[];
-    period?: Pair;
+    startDate?: string;
+    endDate?: string;
     programId: Id;
-    programStageIds: Id[];
+    programStagesIds: Id[];
     closureProgramId: Id;
     timeOfReference: string;
     pairsDeValue: Pair[];
