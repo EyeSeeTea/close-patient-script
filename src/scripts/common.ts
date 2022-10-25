@@ -40,7 +40,8 @@ export const StringPairsByDashSeparatedByCommas: Type<string, Pair[]> = {
         const values = _.compact(str.split(","));
         if (_(values).isEmpty()) throw new Error("Pairs cannot be empty");
         return values.map(value => {
-            const [id1, id2] = value.split("-");
+            const id1 = value.slice(0, value.indexOf("-")); //cannot use .split because of dates using "-"
+            const id2 = value.slice(value.indexOf("-") + 1);
             if (!id1 || !id2) throw new Error(`Invalid pair: ${str} (expected ID1-ID2)`);
             return [id1, id2];
         });
