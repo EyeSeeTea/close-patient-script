@@ -38,7 +38,7 @@ export const StringsSeparatedByCommas: Type<string, string[]> = {
 export const StringPairsByDashSeparatedByCommas: Type<string, Pair[]> = {
     async from(str) {
         const values = _.compact(str.split(","));
-        if (_(values).isEmpty()) throw new Error("Value cannot be empty");
+        if (_(values).isEmpty()) throw new Error("Pairs cannot be empty");
         return values.map(value => {
             const [id1, id2] = value.split("-");
             if (!id1 || !id2) throw new Error(`Invalid pair: ${str} (expected ID1-ID2)`);
