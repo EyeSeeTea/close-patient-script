@@ -66,7 +66,7 @@ export class ProgramsD2Repository implements ProgramsRepository {
             const enrollmentsWithLastDate = teis.flatMap(tei => {
                 const e = _.first(tei.enrollments);
                 if (!e) return [];
-                const { orgUnit, program, trackedEntity, enrollment, enrolledAt } = e;
+                const { orgUnit, program, trackedEntity, enrollment, enrolledAt, occurredAt } = e;
                 const dates = e.events.flatMap(event =>
                     programStagesIds.includes(event.programStage)
                         ? [new Date(event.occurredAt).getTime()]
@@ -80,6 +80,7 @@ export class ProgramsD2Repository implements ProgramsRepository {
                             trackedEntity,
                             enrollment,
                             enrolledAt,
+                            occurredAt,
                             status: "COMPLETED",
                         },
                         lastConsultationDate: dates && !_.isEmpty(dates) && Math.max(...dates),
