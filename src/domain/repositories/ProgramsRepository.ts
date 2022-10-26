@@ -15,5 +15,6 @@ export interface ClosePatientsOptions {
     closureProgramId: Id;
     timeOfReference: string;
     pairsDeValue: Pair[];
-    comments: string;
+    comments?: Pair;
+    post: boolean;
 }

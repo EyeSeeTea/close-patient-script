@@ -5,6 +5,7 @@ import {
     getApiUrlOption,
     getD2Api,
     StringPairsByDashSeparatedByCommas,
+    StringPairSeparatedByDash,
     StringsSeparatedByCommas,
 } from "scripts/common";
 import { ProgramsD2Repository } from "data/ProgramsD2Repository";
@@ -64,9 +65,13 @@ const closePatientsCmd = command({
                 "Data elements that need to be filled out at closure and their associated values DE1-Value1,DE2-Value2[,DE3-Value3]",
         }),
         comments: option({
-            type: string,
+            type: optional(StringPairSeparatedByDash),
             long: "comments",
-            description: "Text string to include in comments",
+            description: "Data element of comments with its associated value DE-Value",
+        }),
+        post: flag({
+            long: "post",
+            description: "Send payload to dhis api. If not present, shows payload.",
         }),
     },
     handler: async args => {
