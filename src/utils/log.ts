@@ -1,14 +1,27 @@
-import SimpleLogger, { STANDARD_LEVELS } from "simple-node-logger";
+import { isElementOfUnion, UnionFromValues } from "./ts-utils";
 
-const manager = new SimpleLogger();
+const logLevels = ["debug", "info", "warn", "error"] as const;
+export type LogLevel = UnionFromValues<typeof logLevels>;
 
-manager.createConsoleAppender({
-    writer(s: string) {
-        process.stderr.write(s + "\n");
-    },
-});
+const levelFromEnv = process.env["LOG_LEVEL"] || "";
+const level = isElementOfUnion(levelFromEnv, logLevels) ? levelFromEnv : "info";
+const levelIndex = logLevels.indexOf(level);
 
-const logLevelFromEnv = process.env["LOG_LEVEL"] as STANDARD_LEVELS;
-const logger = manager.createLogger(undefined, logLevelFromEnv || "info");
+function getLogger(logLevelIndex: number, level: LogLevel) {
+    return function writer(...messages: string[]) {
+        if (logLevelIndex >= levelIndex) {
+            const ts = new Date().toISOString();
+            const message = messages.join(" ");
+            process.stderr.write(`${ts} [${level.toUpperCase()}] ${message}\n`);
+        }
+    };
+}
+
+const logger = {
+    debug: getLogger(0, "debug"),
+    info: getLogger(1, "info"),
+    warn: getLogger(2, "warn"),
+    error: getLogger(3, "error"),
+};
 
 export default logger;
