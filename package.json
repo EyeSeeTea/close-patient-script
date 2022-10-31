@@ -1,8 +1,8 @@
 {
-    "name": "d2-tools",
+    "name": "close-patient-script",
     "version": "0.1.0",
     "main": "src/index.ts",
-    "description": "DHIS2 tools",
+    "description": "Generic script to close patients from the specified DHIS2 tracker program",
     "scripts": {
         "build:dev": "webpack --mode development --watch",
         "build": "webpack --mode production",

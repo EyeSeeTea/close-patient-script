@@ -71,7 +71,7 @@ const closePatientsCmd = command({
         }),
         post: flag({
             long: "post",
-            description: "Send payload to dhis api. If not present, shows payload.",
+            description: "Send payload to DHIS2 API. If not present, shows payload.",
         }),
     },
     handler: async args => {
