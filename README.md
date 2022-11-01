@@ -17,7 +17,7 @@ shell:~$ yarn start patients close --url='http://USER:PASSWORD@localhost:8080' \
   --tracker-program-id=ORvg6A5ed7z \
   --program-stages-ids=tmsr4EJaSPz \
   --closure-program-id=XuThsezwYbZ \
-  --time-of-reference=0 \
+  --time-of-reference=90 \
   --pairs-de-value=B2djsn1DVCj-1,qbZ8eKRUxYT-2 \
   --comments=SoLScs3kn7E-Comment \
   [--post]

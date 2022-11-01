@@ -77,7 +77,7 @@ export class ProgramsD2Repository implements ProgramsRepository {
                                           ?.map(({ message }) => message)
                                           .join("\n")
                                   )
-                                : data.message
+                                : data.message || "Unknown error"
                         );
                     }
                 });
@@ -88,7 +88,7 @@ export class ProgramsD2Repository implements ProgramsRepository {
                 .catch((res: ApiPostErrorResponse) => {
                     const { data } = res.response;
                     if (data.status !== "OK") {
-                        log.error(`GET /tracker/trackedEntities: `, data.message);
+                        log.error(`GET /tracker/trackedEntities: `, data.message || "Unknown error");
                     }
                 });
     }
