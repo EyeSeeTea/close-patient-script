@@ -17,26 +17,26 @@ export interface TrackedEntity {
     programOwners: ProgramOwner[];
 }
 
-interface Enrollment {
+export interface Enrollment {
     enrollment: Id;
-    createdAt: ISODate;
-    createdAtClient: ISODate;
-    updatedAt: ISODate;
-    updatedAtClient: ISODate;
+    createdAt?: ISODate;
+    createdAtClient?: ISODate;
+    updatedAt?: ISODate;
+    updatedAtClient?: ISODate;
     trackedEntity: Id;
     program: Id;
     status: "ACTIVE" | "COMPLETED" | "CANCELLED";
     orgUnit: Id;
-    orgUnitName: string;
+    orgUnitName?: string;
     enrolledAt: ISODate;
     occurredAt: ISODate;
-    followUp: boolean;
-    deleted: boolean;
-    storedBy: string;
-    events: Event[];
-    relationships: never[];
-    attributes: Attribute[];
-    notes: Note[];
+    followUp?: boolean;
+    deleted?: boolean;
+    storedBy?: string;
+    events?: Event[];
+    relationships?: never[];
+    attributes?: Attribute[];
+    notes?: Note[];
 }
 
 interface ProgramOwner {

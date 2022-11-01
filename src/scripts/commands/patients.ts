@@ -1,5 +1,5 @@
 import _ from "lodash";
-import { command, string, subcommands, option, optional, flag } from "cmd-ts";
+import { command, string, subcommands, option, optional, flag, number } from "cmd-ts";
 
 import {
     getApiUrlOption,
@@ -54,7 +54,7 @@ const closePatientsCmd = command({
             description: "Program stage to be created at closure ID",
         }),
         timeOfReference: option({
-            type: string,
+            type: number,
             long: "time-of-reference",
             description: "Time, in days, to consider a patient lost to follow-up ",
         }),
@@ -75,8 +75,6 @@ const closePatientsCmd = command({
         }),
     },
     handler: async args => {
-        if (_.isEmpty(args.programStagesIds)) throw new Error("Missing program stages IDs");
-        if (_.isEmpty(args.pairsDeValue)) throw new Error("Missing Pairs DE-Value");
         const api = getD2Api(args.url);
         const programsRepository = new ProgramsD2Repository(api);
         new ClosePatientsUseCase(programsRepository).execute(_.omit(args, ["url"]));

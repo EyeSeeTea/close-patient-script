@@ -1,5 +1,6 @@
 import { Async } from "domain/entities/Async";
-import { ProgramsRepository, ClosePatientsOptions } from "domain/repositories/ProgramsRepository";
+import { ProgramsRepository } from "domain/repositories/ProgramsRepository";
+import { ClosePatientsOptions } from "data/ProgramsD2Repository";
 
 export class ClosePatientsUseCase {
     constructor(private programsRepository: ProgramsRepository) {}

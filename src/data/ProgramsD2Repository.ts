@@ -1,8 +1,10 @@
 import _ from "lodash";
-import { ClosePatientsOptions, ProgramsRepository } from "domain/repositories/ProgramsRepository";
+import { ProgramsRepository } from "domain/repositories/ProgramsRepository";
+import { Enrollment, TrackedEntity } from "domain/entities/TrackedEntity";
 import { Async } from "domain/entities/Async";
+import { Id } from "domain/entities/Base";
 import { D2Api } from "types/d2-api";
-import { TrackedEntity } from "domain/entities/TrackedEntity";
+import { Pair } from "scripts/common";
 import log from "utils/log";
 
 export class ProgramsD2Repository implements ProgramsRepository {
@@ -22,9 +24,6 @@ export class ProgramsD2Repository implements ProgramsRepository {
             post,
         } = options;
 
-        const daysOfReference = parseInt(timeOfReference);
-        if (_.isNaN(daysOfReference)) throw new Error("Time of reference must be a number");
-
         const filteredEntities$ = this.api
             .get<ApiGetResponse>("/tracker/trackedEntities", {
                 program: programId,
@@ -35,84 +34,23 @@ export class ProgramsD2Repository implements ProgramsRepository {
                 fields: "*,enrollments[*]",
                 skipPaging: true,
             })
-            .map(({ data }) => {
-                const teisWithoutClosure = data.instances.filter(tei => {
-                    const enrollment = _.first(tei.enrollments);
-                    if (!enrollment) return;
-                    return (
-                        enrollment.status !== "COMPLETED" &&
-                        !enrollment.events.some(
-                            event => event.programStage === closureProgramId && !event.deleted
-                        )
-                    );
-                });
-                const filteredEntities = teisWithoutClosure.filter(tei => {
-                    const dates = _.first(tei.enrollments)?.events.flatMap(event =>
-                        programStagesIds.includes(event.programStage)
-                            ? [new Date(event.occurredAt).getTime()]
-                            : []
-                    );
-                    const currentDate = new Date();
-                    currentDate.setDate(currentDate.getDate() - daysOfReference);
-                    const occurredBefore = currentDate.getTime();
-                    return (
-                        dates &&
-                        !_.isEmpty(dates) &&
-                        Math.max(Math.max(...dates), occurredBefore) === occurredBefore
-                    );
-                });
-                return filteredEntities;
-            });
+            .map(({ data }) =>
+                this.filterEntities(data, closureProgramId, programStagesIds, timeOfReference)
+            );
 
         const payload$ = filteredEntities$.map(({ data: teis }) => {
-            const enrollmentsWithLastDate = teis.flatMap(tei => {
-                const e = _.first(tei.enrollments);
-                if (!e) return [];
-                const { orgUnit, program, trackedEntity, enrollment, enrolledAt, occurredAt } = e;
-                const dates = e.events.flatMap(event =>
-                    programStagesIds.includes(event.programStage)
-                        ? [new Date(event.occurredAt).getTime()]
-                        : []
-                );
-                return [
-                    {
-                        enrollment: {
-                            orgUnit,
-                            program,
-                            trackedEntity,
-                            enrollment,
-                            enrolledAt,
-                            occurredAt,
-                            status: "COMPLETED",
-                        },
-                        lastConsultationDate: dates && !_.isEmpty(dates) && Math.max(...dates),
-                    },
-                ];
-            });
-
-            const events = enrollmentsWithLastDate.flatMap(
-                ({ enrollment: e, lastConsultationDate: date }) => {
-                    if (!date) return [];
-                    const ocurredAt = new Date(date);
-                    ocurredAt.setDate(ocurredAt.getDate() + daysOfReference);
-                    const dataValues = pairsDeValue.map(([dataElement, value]) => ({ dataElement, value }));
-                    const [commentDe, commentValue] = comments ?? [];
-                    return [
-                        {
-                            status: e.status,
-                            programStage: closureProgramId,
-                            enrollment: e.enrollment,
-                            orgUnit: e.orgUnit,
-                            occurredAt: ocurredAt.toISOString(),
-                            createdAt: new Date().toISOString(),
-                            updatedAt: new Date().toISOString(),
-                            dataValues:
-                                commentDe && commentValue
-                                    ? [...dataValues, { dataElement: commentDe, value: commentValue }]
-                                    : dataValues,
-                        },
-                    ];
-                }
+            const enrollmentsWithLastDate = teis.flatMap(tei =>
+                this.getEnrollmentsWithLastDate(tei, programStagesIds)
+            );
+            const events = enrollmentsWithLastDate.flatMap(({ enrollment: e, lastConsultationDate: date }) =>
+                this.getPayloadEvents({
+                    enrollment: e,
+                    timeOfReference,
+                    pairsDeValue,
+                    closureProgramId,
+                    date: date ? date : undefined,
+                    comments,
+                })
             );
 
             return {
@@ -154,6 +92,103 @@ export class ProgramsD2Repository implements ProgramsRepository {
                     }
                 });
     }
+
+    private getTeiWithoutClosure(instances: TrackedEntity[], closureProgramId: string) {
+        return instances.filter(tei => {
+            const enrollment = _.first(tei.enrollments);
+            return (
+                enrollment &&
+                enrollment.status !== "COMPLETED" &&
+                !enrollment.events?.some(event => event.programStage === closureProgramId && !event.deleted)
+            );
+        });
+    }
+
+    private getDatesByProgramStages(tei: TrackedEntity, programStagesIds: string[]) {
+        return _.first(tei.enrollments)?.events?.flatMap(event =>
+            programStagesIds.includes(event.programStage) ? [new Date(event.occurredAt).getTime()] : []
+        );
+    }
+
+    private getRelativeDate(timeOfReference: number, date?: number) {
+        const relativeDate = date ? new Date(date) : new Date();
+        relativeDate.setDate(relativeDate.getDate() - timeOfReference);
+        return relativeDate;
+    }
+
+    private filterEntities(
+        data: ApiGetResponse,
+        closureProgramId: string,
+        programStagesIds: string[],
+        timeOfReference: number
+    ) {
+        const teisWithoutClosure = this.getTeiWithoutClosure(data.instances, closureProgramId);
+        const filteredEntities = teisWithoutClosure.filter(tei => {
+            const dates = this.getDatesByProgramStages(tei, programStagesIds);
+            const occurredBefore = this.getRelativeDate(-timeOfReference).getTime();
+            return dates && !_.isEmpty(dates) && Math.max(...dates, occurredBefore) === occurredBefore;
+        });
+        return filteredEntities;
+    }
+
+    private getEnrollmentsWithLastDate(tei: TrackedEntity, programStagesIds: string[]) {
+        const e = _.first(tei.enrollments);
+        if (!e) return [];
+        const { orgUnit, program, trackedEntity, enrollment, enrolledAt, occurredAt } = e;
+        const dates = e.events?.flatMap(event =>
+            programStagesIds.includes(event.programStage) ? [new Date(event.occurredAt).getTime()] : []
+        );
+        return [
+            {
+                enrollment: {
+                    orgUnit,
+                    program,
+                    trackedEntity,
+                    enrollment,
+                    enrolledAt,
+                    occurredAt,
+                    status: "COMPLETED" as const,
+                },
+                lastConsultationDate: dates && !_.isEmpty(dates) && Math.max(...dates),
+            },
+        ];
+    }
+
+    private getPayloadEvents(options: GetPayloadEventsOptions) {
+        const { enrollment: e, timeOfReference, pairsDeValue, closureProgramId, date, comments } = options;
+        if (!date) return [];
+        const ocurredAt = this.getRelativeDate(timeOfReference, date);
+        const dataValues = pairsDeValue.map(([dataElement, value]) => ({ dataElement, value }));
+        const [commentDe, commentValue] = comments ?? [];
+        return [
+            {
+                status: e.status,
+                programStage: closureProgramId,
+                enrollment: e.enrollment,
+                orgUnit: e.orgUnit,
+                occurredAt: ocurredAt.toISOString(),
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                dataValues:
+                    commentDe && commentValue
+                        ? [...dataValues, { dataElement: commentDe, value: commentValue }]
+                        : dataValues,
+            },
+        ];
+    }
+}
+
+export interface ClosePatientsOptions {
+    orgUnitsIds?: Id[];
+    startDate?: string;
+    endDate?: string;
+    programId: Id;
+    programStagesIds: Id[];
+    closureProgramId: Id;
+    timeOfReference: number;
+    pairsDeValue: Pair[];
+    comments?: Pair;
+    post: boolean;
 }
 
 interface ApiGetResponse {
@@ -176,6 +211,15 @@ interface Stats {
     deleted: number;
     ignored: number;
     total: number;
+}
+
+interface GetPayloadEventsOptions {
+    enrollment: Enrollment;
+    timeOfReference: number;
+    pairsDeValue: Pair[];
+    closureProgramId: string;
+    date?: number;
+    comments?: Pair;
 }
 
 type ApiPostErrorResponse = {
