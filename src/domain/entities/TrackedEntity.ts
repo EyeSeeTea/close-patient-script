@@ -45,24 +45,24 @@ interface ProgramOwner {
     program: Id;
 }
 
-interface Event {
-    event: Id;
+export interface Event {
+    event?: Id;
     status: "ACTIVE" | "COMPLETED" | "VISITED" | "SCHEDULE" | "OVERDUE" | "SKIPPED";
-    program: Id;
+    program?: Id;
     programStage: Id;
     enrollment: Id;
     orgUnit: Id;
-    orgUnitName: string;
-    relationships: never[];
+    orgUnitName?: string;
+    relationships?: never[];
     occurredAt: ISODate;
-    scheduledAt: ISODate;
-    storedBy: string;
-    followup: boolean;
-    deleted: boolean;
+    scheduledAt?: ISODate;
+    storedBy?: string;
+    followup?: boolean;
+    deleted?: boolean;
     createdAt: ISODate;
     updatedAt: ISODate;
-    attributeOptionCombo: Id;
-    attributeCategoryOptions: Id;
+    attributeOptionCombo?: Id;
+    attributeCategoryOptions?: Id;
     dataValues: DataValue[];
 }
 
@@ -79,7 +79,7 @@ interface Attribute {
 
 interface DataValue {
     dataElement: Id;
-    value?: string;
+    value: string;
     providedElsewhere?: boolean;
     createdAt?: ISODate;
     updatedAt?: ISODate;

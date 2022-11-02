@@ -1,4 +1,4 @@
-import { TrackedEntity } from "domain/entities/TrackedEntity";
+import { Event, TrackedEntity } from "domain/entities/TrackedEntity";
 import { CancelableResponse } from "types/d2-api";
 
 export interface ProgramsRepository {
@@ -23,19 +23,7 @@ export interface Payload {
         occurredAt: string;
         status: "COMPLETED";
     }[];
-    events: {
-        status: any;
-        programStage: string;
-        enrollment: any;
-        orgUnit: any;
-        occurredAt: string;
-        createdAt: string;
-        updatedAt: string;
-        dataValues: {
-            dataElement: string;
-            value: string;
-        }[];
-    }[];
+    events: Event[];
 }
 
 export interface ApiGetResponse {
