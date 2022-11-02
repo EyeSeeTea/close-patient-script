@@ -76,6 +76,28 @@ export class ClosePatientsUseCase {
         });
     }
 
+    private mapPayload(entities: TrackedEntity[], options: MapPayloadOptions): Payload {
+        const { programStagesIds, timeOfReference, pairsDeValue, closureProgramId, comments } = options;
+        const enrollmentsWithLastDate = entities.flatMap(entity =>
+            this.mapEnrollments(entity, programStagesIds)
+        );
+        const events = enrollmentsWithLastDate.flatMap(({ enrollment: e, lastConsultationDate: date }) =>
+            this.mapEvents({
+                enrollment: e,
+                timeOfReference,
+                pairsDeValue,
+                closureProgramId,
+                date: date ? date : undefined,
+                comments,
+            })
+        );
+
+        return {
+            enrollments: enrollmentsWithLastDate.map(({ enrollment }) => enrollment),
+            events: events,
+        };
+    }
+
     private getDatesByProgramStages(entity: TrackedEntity, programStagesIds: string[]) {
         return _.first(entity.enrollments)?.events?.flatMap(event =>
             programStagesIds.includes(event.programStage) && !event.deleted
@@ -84,13 +106,7 @@ export class ClosePatientsUseCase {
         );
     }
 
-    private getRelativeDate(timeOfReference: number, date?: number) {
-        const relativeDate = date ? new Date(date) : new Date();
-        relativeDate.setDate(relativeDate.getDate() + timeOfReference);
-        return relativeDate;
-    }
-
-    private getEnrollmentsWithLastDate(entity: TrackedEntity, programStagesIds: string[]) {
+    private mapEnrollments(entity: TrackedEntity, programStagesIds: string[]) {
         const e = _.first(entity.enrollments);
         if (!e) return [];
         const { orgUnit, program, trackedEntity, enrollment, enrolledAt, occurredAt } = e;
@@ -113,7 +129,7 @@ export class ClosePatientsUseCase {
         ];
     }
 
-    private getPayloadEvents(options: GetPayloadEventsOptions) {
+    private mapEvents(options: MapEventsOptions) {
         const { enrollment: e, timeOfReference, pairsDeValue, closureProgramId, date, comments } = options;
         if (!date) return [];
         const ocurredAt = this.getRelativeDate(timeOfReference, date);
@@ -134,28 +150,6 @@ export class ClosePatientsUseCase {
                         : dataValues,
             },
         ];
-    }
-
-    private mapPayload(entities: TrackedEntity[], options: MapPayloadOptions): Payload {
-        const { programStagesIds, timeOfReference, pairsDeValue, closureProgramId, comments } = options;
-        const enrollmentsWithLastDate = entities.flatMap(entity =>
-            this.getEnrollmentsWithLastDate(entity, programStagesIds)
-        );
-        const events = enrollmentsWithLastDate.flatMap(({ enrollment: e, lastConsultationDate: date }) =>
-            this.getPayloadEvents({
-                enrollment: e,
-                timeOfReference,
-                pairsDeValue,
-                closureProgramId,
-                date: date ? date : undefined,
-                comments,
-            })
-        );
-
-        return {
-            enrollments: enrollmentsWithLastDate.map(({ enrollment }) => enrollment),
-            events: events,
-        };
     }
 
     private makeRequest(request$: CancelableResponse<ApiSaveResponse | Payload>, post: boolean) {
@@ -189,6 +183,12 @@ export class ClosePatientsUseCase {
                 }
             });
     }
+
+    private getRelativeDate(timeOfReference: number, date?: number) {
+        const relativeDate = date ? new Date(date) : new Date();
+        relativeDate.setDate(relativeDate.getDate() + timeOfReference);
+        return relativeDate;
+    }
 }
 
 interface MapPayloadOptions {
@@ -199,7 +199,7 @@ interface MapPayloadOptions {
     comments?: Pair;
 }
 
-interface GetPayloadEventsOptions {
+interface MapEventsOptions {
     enrollment: Enrollment;
     timeOfReference: number;
     pairsDeValue: Pair[];
