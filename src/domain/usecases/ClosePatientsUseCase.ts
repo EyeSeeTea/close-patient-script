@@ -4,6 +4,7 @@ import {
     ApiPostErrorResponse,
     ApiSaveResponse,
     ProgramsRepository,
+    Payload,
 } from "domain/repositories/ProgramsRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
@@ -33,7 +34,7 @@ export class ClosePatientsUseCase {
             .get({ programId, orgUnitsIds, startDate, endDate })
             .map(({ data }) => this.filterEntities(data, closureProgramId, programStagesIds, timeOfReference))
             .map(({ data }) =>
-                this.getPayload(data, {
+                this.mapPayload(data, {
                     programStagesIds,
                     timeOfReference,
                     pairsDeValue,
@@ -42,17 +43,9 @@ export class ClosePatientsUseCase {
                 })
             );
 
-        if (post) this.logResponse(payload$.flatMap(({ data }) => this.programsRepository.save(data)));
-        else
-            payload$
-                .getData()
-                .then(payload => log.info(`Payload: ${JSON.stringify(payload)}`))
-                .catch((res: ApiPostErrorResponse) => {
-                    const { data } = res.response;
-                    if (data.status !== "OK") {
-                        log.error(`GET /tracker/trackedEntities: `, data.message || "Unknown error");
-                    }
-                });
+        const saveRequest$ = payload$.flatMap(({ data }) => this.programsRepository.save(data));
+        if (post) this.makeRequest(saveRequest$, post);
+        else this.makeRequest(payload$, post);
     }
 
     /* Private */
@@ -62,19 +55,19 @@ export class ClosePatientsUseCase {
         closureProgramId: string,
         programStagesIds: string[],
         timeOfReference: number
-    ) {
-        const teisWithoutClosure = this.getTeiWithoutClosure(data.instances, closureProgramId);
-        const filteredEntities = teisWithoutClosure.filter(tei => {
-            const dates = this.getDatesByProgramStages(tei, programStagesIds);
+    ): TrackedEntity[] {
+        const entitiesWithoutClosure = this.getEntitiesWithoutClosure(data.instances, closureProgramId);
+        const filteredEntities = entitiesWithoutClosure.filter(entity => {
+            const dates = this.getDatesByProgramStages(entity, programStagesIds);
             const occurredBefore = this.getRelativeDate(-timeOfReference).getTime();
             return dates && !_.isEmpty(dates) && Math.max(...dates, occurredBefore) === occurredBefore;
         });
         return filteredEntities;
     }
 
-    private getTeiWithoutClosure(instances: TrackedEntity[], closureProgramId: string) {
-        return instances.filter(tei => {
-            const enrollment = _.first(tei.enrollments);
+    private getEntitiesWithoutClosure(instances: TrackedEntity[], closureProgramId: string): TrackedEntity[] {
+        return instances.filter(entity => {
+            const enrollment = _.first(entity.enrollments);
             return (
                 enrollment &&
                 enrollment.status !== "COMPLETED" &&
@@ -83,9 +76,11 @@ export class ClosePatientsUseCase {
         });
     }
 
-    private getDatesByProgramStages(tei: TrackedEntity, programStagesIds: string[]) {
-        return _.first(tei.enrollments)?.events?.flatMap(event =>
-            programStagesIds.includes(event.programStage) ? [new Date(event.occurredAt).getTime()] : []
+    private getDatesByProgramStages(entity: TrackedEntity, programStagesIds: string[]) {
+        return _.first(entity.enrollments)?.events?.flatMap(event =>
+            programStagesIds.includes(event.programStage) && !event.deleted
+                ? [new Date(event.occurredAt).getTime()]
+                : []
         );
     }
 
@@ -95,8 +90,8 @@ export class ClosePatientsUseCase {
         return relativeDate;
     }
 
-    private getEnrollmentsWithLastDate(tei: TrackedEntity, programStagesIds: string[]) {
-        const e = _.first(tei.enrollments);
+    private getEnrollmentsWithLastDate(entity: TrackedEntity, programStagesIds: string[]) {
+        const e = _.first(entity.enrollments);
         if (!e) return [];
         const { orgUnit, program, trackedEntity, enrollment, enrolledAt, occurredAt } = e;
         const dates = e.events?.flatMap(event =>
@@ -141,10 +136,10 @@ export class ClosePatientsUseCase {
         ];
     }
 
-    private getPayload(teis: TrackedEntity[], options: GetPayloadOptions) {
+    private mapPayload(entities: TrackedEntity[], options: MapPayloadOptions): Payload {
         const { programStagesIds, timeOfReference, pairsDeValue, closureProgramId, comments } = options;
-        const enrollmentsWithLastDate = teis.flatMap(tei =>
-            this.getEnrollmentsWithLastDate(tei, programStagesIds)
+        const enrollmentsWithLastDate = entities.flatMap(entity =>
+            this.getEnrollmentsWithLastDate(entity, programStagesIds)
         );
         const events = enrollmentsWithLastDate.flatMap(({ enrollment: e, lastConsultationDate: date }) =>
             this.getPayloadEvents({
@@ -163,31 +158,40 @@ export class ClosePatientsUseCase {
         };
     }
 
-    private logResponse(response$: CancelableResponse<ApiSaveResponse>) {
-        response$
+    private makeRequest(request$: CancelableResponse<ApiSaveResponse | Payload>, post: boolean) {
+        request$
             .getData()
             .then(res =>
-                log.info(`Closed patients: enrollments and closure events: ${JSON.stringify(res.stats)}`)
+                log.info(
+                    post
+                        ? `Closed patients: enrollments and closure events: ${JSON.stringify(
+                              (res as ApiSaveResponse).stats
+                          )}`
+                        : `Payload: ${JSON.stringify(res as Payload)}`
+                )
             )
             .catch((res: ApiPostErrorResponse) => {
                 const { data } = res.response;
                 if (data.status !== "OK") {
                     log.error(
-                        `POST /tracker: `,
-                        data.validationReport
-                            ? JSON.stringify(
-                                  data.validationReport?.errorReports
-                                      ?.map(({ message }) => message)
-                                      .join("\n")
-                              )
-                            : data.message || "Unknown error"
+                        post
+                            ? `POST /tracker: ${
+                                  data.validationReport
+                                      ? JSON.stringify(
+                                            data.validationReport?.errorReports
+                                                ?.map(({ message }) => message)
+                                                .join("\n")
+                                        )
+                                      : data.message || "Unknown error"
+                              }`
+                            : `GET /tracker/trackedEntities: ${data.message || "Unknown error"}`
                     );
                 }
             });
     }
 }
 
-interface GetPayloadOptions {
+interface MapPayloadOptions {
     programStagesIds: string[];
     timeOfReference: number;
     pairsDeValue: Pair[];

@@ -1,4 +1,4 @@
-import { Event, TrackedEntity } from "domain/entities/TrackedEntity";
+import { Enrollment, Event, TrackedEntity } from "domain/entities/TrackedEntity";
 import { CancelableResponse } from "types/d2-api";
 
 export interface ProgramsRepository {
@@ -14,15 +14,7 @@ export interface GetOptions {
 }
 
 export interface Payload {
-    enrollments: {
-        orgUnit: string;
-        program: string;
-        trackedEntity: string;
-        enrollment: string;
-        enrolledAt: string;
-        occurredAt: string;
-        status: "COMPLETED";
-    }[];
+    enrollments: Enrollment[];
     events: Event[];
 }
 
