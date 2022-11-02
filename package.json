@@ -15,13 +15,8 @@
     "license": "MIT",
     "dependencies": {
         "@eyeseetea/d2-api": "^1.11.0",
-        "@types/json-diff": "^0.7.0",
         "cmd-ts": "^0.10.0",
-        "csv-writer": "^1.6.0",
-        "d2-utilizr": "^0.2.16",
-        "json-diff": "^0.7.3",
-        "lodash": "^4.17.21",
-        "loglevel": "^1.8.0"
+        "lodash": "^4.17.21"
     },
     "devDependencies": {
         "@types/lodash": "^4.14.180",
