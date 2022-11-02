@@ -1,6 +1,67 @@
-import { ClosePatientsOptions } from "data/ProgramsD2Repository";
-import { Async } from "domain/entities/Async";
+import { TrackedEntity } from "domain/entities/TrackedEntity";
+import { CancelableResponse } from "types/d2-api";
 
 export interface ProgramsRepository {
-    closePatients(options: ClosePatientsOptions): Async<void>;
+    get(options: GetOptions): CancelableResponse<ApiGetResponse>;
+    save(payload: Payload): CancelableResponse<ApiSaveResponse>;
+}
+
+export interface GetOptions {
+    programId: string;
+    orgUnitsIds?: string[];
+    startDate?: string;
+    endDate?: string;
+}
+
+export interface Payload {
+    enrollments: {
+        orgUnit: string;
+        program: string;
+        trackedEntity: string;
+        enrollment: string;
+        enrolledAt: string;
+        occurredAt: string;
+        status: "COMPLETED";
+    }[];
+    events: {
+        status: any;
+        programStage: string;
+        enrollment: any;
+        orgUnit: any;
+        occurredAt: string;
+        createdAt: string;
+        updatedAt: string;
+        dataValues: {
+            dataElement: string;
+            value: string;
+        }[];
+    }[];
+}
+
+export interface ApiGetResponse {
+    instances: TrackedEntity[];
+}
+
+export interface ApiSaveResponse {
+    validationReport?: { errorReports?: Report[] };
+    status: "OK" | "ERROR" | "WARNING";
+    stats: Stats;
+}
+
+export type ApiPostErrorResponse = {
+    response: {
+        data: ApiSaveResponse & { message?: string };
+    };
+};
+
+interface Report {
+    message: string;
+}
+
+interface Stats {
+    created: number;
+    updated: number;
+    deleted: number;
+    ignored: number;
+    total: number;
 }
