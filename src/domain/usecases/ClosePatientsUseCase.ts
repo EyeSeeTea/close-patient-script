@@ -1,17 +1,10 @@
 import _ from "lodash";
-import {
-    ApiGetResponse,
-    ApiPostErrorResponse,
-    ApiSaveResponse,
-    ProgramsRepository,
-    Payload,
-} from "domain/repositories/ProgramsRepository";
+import { ProgramsRepository, ClosurePayload } from "domain/repositories/ProgramsRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
 import { Pair } from "scripts/common";
 import { Enrollment, TrackedEntity } from "domain/entities/TrackedEntity";
 import log from "utils/log";
-import { CancelableResponse } from "@eyeseetea/d2-api";
 
 export class ClosePatientsUseCase {
     constructor(private programsRepository: ProgramsRepository) {}
@@ -30,11 +23,11 @@ export class ClosePatientsUseCase {
             post,
         } = options;
 
-        const payload$ = this.programsRepository
+        const payload = await this.programsRepository
             .get({ programId, orgUnitsIds, startDate, endDate })
-            .map(({ data }) =>
+            .then(trackedEntities =>
                 this.filterEntities(
-                    data,
+                    trackedEntities,
                     programId,
                     closureProgramId,
                     programStagesIds,
@@ -42,8 +35,8 @@ export class ClosePatientsUseCase {
                     orgUnitsIds
                 )
             )
-            .map(({ data }) =>
-                this.mapPayload(data, {
+            .then(entities =>
+                this.mapPayload(entities, {
                     programStagesIds,
                     timeOfReference,
                     pairsDeValue,
@@ -52,15 +45,19 @@ export class ClosePatientsUseCase {
                 })
             );
 
-        const saveRequest$ = payload$.flatMap(({ data }) => this.programsRepository.save(data));
-        if (post) this.makeRequest(saveRequest$, post);
-        else this.makeRequest(payload$, post);
+        if (post) {
+            this.programsRepository
+                .save(payload)
+                .then(stats =>
+                    log.info(`Closed patients. Enrollments and closure events: ${JSON.stringify(stats)}`)
+                );
+        } else log.info(`Payload: ${JSON.stringify(payload)}`);
     }
 
     /* Private */
 
     private filterEntities(
-        data: ApiGetResponse,
+        trackedEntities: TrackedEntity[],
         programId: string,
         closureProgramId: string,
         programStagesIds: string[],
@@ -68,7 +65,7 @@ export class ClosePatientsUseCase {
         orgUnitsIds?: string[]
     ): TrackedEntity[] {
         const entitiesWithoutClosure = this.getEntitiesWithoutClosure(
-            data.instances,
+            trackedEntities,
             programId,
             closureProgramId,
             orgUnitsIds
@@ -120,7 +117,7 @@ export class ClosePatientsUseCase {
         });
     }
 
-    private mapPayload(entities: TrackedEntity[], options: MapPayloadOptions): Payload {
+    private mapPayload(entities: TrackedEntity[], options: MapPayloadOptions): ClosurePayload {
         const { programStagesIds, timeOfReference, pairsDeValue, closureProgramId, comments } = options;
         const enrollmentsWithLastDate = entities.flatMap(entity =>
             this.mapEnrollments(entity, programStagesIds)
@@ -194,38 +191,6 @@ export class ClosePatientsUseCase {
                         : dataValues,
             },
         ];
-    }
-
-    private makeRequest(request$: CancelableResponse<ApiSaveResponse | Payload>, post: boolean) {
-        request$
-            .getData()
-            .then(res =>
-                log.info(
-                    post
-                        ? `Closed patients: enrollments and closure events: ${JSON.stringify(
-                              (res as ApiSaveResponse).stats
-                          )}`
-                        : `Payload: ${JSON.stringify(res as Payload)}`
-                )
-            )
-            .catch((res: ApiPostErrorResponse) => {
-                const { data } = res.response;
-                if (data.status !== "OK") {
-                    log.error(
-                        post
-                            ? `POST /tracker: ${
-                                  data.validationReport
-                                      ? JSON.stringify(
-                                            data.validationReport?.errorReports
-                                                ?.map(({ message }) => message)
-                                                .join("\n")
-                                        )
-                                      : data.message || "Unknown error"
-                              }`
-                            : `GET /tracker/trackedEntities: ${data.message || "Unknown error"}`
-                    );
-                }
-            });
     }
 
     private getRelativeDate(timeOfReference: number, date?: number) {
