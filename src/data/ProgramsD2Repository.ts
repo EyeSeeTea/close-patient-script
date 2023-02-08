@@ -39,10 +39,6 @@ export class ProgramsD2Repository implements ProgramsRepository {
     async getTeis(ids: Id[]): Async<any[]> {
         log.info(`About to send ${ids.length} requests. This can take for minutes.`);
         const promises = await this.getRealOrgUnits(ids).then(res =>
-            // _.groupBy(
-            //     res.flatMap(p => (p.status === "fulfilled" ? [p.value] : [])),
-            //     value => _.has(value, "id")
-            // )
             res.flatMap(p =>
                 p.status === "fulfilled" && _.has(p.value, "enrollments")
                     ? [p.value as TrackedEntityInstancePick]

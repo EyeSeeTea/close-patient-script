@@ -1,11 +1,10 @@
-import _, { takeRight } from "lodash";
+import _ from "lodash";
 import { ProgramsRepository, ClosurePayload } from "domain/repositories/ProgramsRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
 import { Pair } from "scripts/common";
 import { Enrollment, TrackedEntity } from "domain/entities/TrackedEntity";
 import log from "utils/log";
-import { TrackedEntityInstances } from "@eyeseetea/d2-api/api/trackedEntityInstances";
 
 export class ClosePatientsUseCase {
     constructor(private programsRepository: ProgramsRepository) {}
