@@ -1,10 +1,11 @@
-import _ from "lodash";
+import _, { takeRight } from "lodash";
 import { ProgramsRepository, ClosurePayload } from "domain/repositories/ProgramsRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
 import { Pair } from "scripts/common";
 import { Enrollment, TrackedEntity } from "domain/entities/TrackedEntity";
 import log from "utils/log";
+import { TrackedEntityInstances } from "@eyeseetea/d2-api/api/trackedEntityInstances";
 
 export class ClosePatientsUseCase {
     constructor(private programsRepository: ProgramsRepository) {}
@@ -25,16 +26,43 @@ export class ClosePatientsUseCase {
 
         const payload = await this.programsRepository
             .get({ programId, orgUnitsIds, startDate, endDate })
-            .then(trackedEntities =>
-                this.filterEntities(
-                    trackedEntities,
+            .then(async trackedEntities => ({
+                teis: await this.programsRepository.getTeis(trackedEntities.map(tei => tei.trackedEntity)), //TEMPORAL FIX
+                trackedEntities,
+            }))
+            .then(({ trackedEntities, teis }) => {
+                const fixedTrackedEntities = trackedEntities.map(entity => {
+                    const teiWithRealOrgUnits = teis.find(
+                        tei => tei.trackedEntityInstance === entity.trackedEntity
+                    );
+                    const newEnrollments = entity.enrollments.map(enrollment => {
+                        const realEnrollment = teiWithRealOrgUnits?.enrollments.find(
+                            realEnrollment => realEnrollment.enrollment === enrollment.enrollment
+                        );
+
+                        return {
+                            ...enrollment,
+                            orgUnit: realEnrollment ? realEnrollment.orgUnit : enrollment.orgUnit,
+                            orgUnitName: realEnrollment
+                                ? (realEnrollment as any).orgUnitName
+                                : enrollment.orgUnitName,
+                        };
+                    });
+
+                    return {
+                        ...entity,
+                        enrollments: newEnrollments,
+                    };
+                });
+                return this.filterEntities(
+                    fixedTrackedEntities,
                     programId,
                     closureProgramId,
                     programStagesIds,
                     timeOfReference,
                     orgUnitsIds
-                )
-            )
+                );
+            })
             .then(entities =>
                 this.mapPayload(entities, {
                     programStagesIds,
@@ -85,24 +113,7 @@ export class ClosePatientsUseCase {
         orgUnitsIds?: string[]
     ): TrackedEntity[] {
         return instances.flatMap(entity => {
-            //New Tracker DHIS bug. TEI.enrollments.orgUnit|orgUnitName
-            const fixedOrgUnitEnrollments = entity.enrollments.flatMap(enrollment => {
-                const orgUnits = _.uniq(enrollment.events?.map(({ orgUnit }) => orgUnit));
-                const orgUnitNames = _.uniq(enrollment.events?.map(({ orgUnit }) => orgUnit));
-                if (orgUnits.length > 1 || orgUnitNames.length > 1) {
-                    log.error("ERROR: DHIS2 enrollment events have more than one orgUnit.");
-                    return [];
-                }
-                const orgUnit = _.first(orgUnits);
-                const orgUnitName = _.first(orgUnitNames);
-                if (!orgUnit || !orgUnitName) return [];
-
-                return [{ ...enrollment, orgUnit: orgUnit, orgUnitName: orgUnitName }];
-            });
-
-            const enrollments = fixedOrgUnitEnrollments.filter(({ orgUnit }) =>
-                orgUnitsIds?.includes(orgUnit)
-            );
+            const enrollments = entity.enrollments.filter(({ orgUnit }) => orgUnitsIds?.includes(orgUnit));
 
             const enrollmentFromProgram = enrollments.find(enrollment => enrollment.program === programId);
             if (
