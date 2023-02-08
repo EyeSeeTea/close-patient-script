@@ -45,7 +45,7 @@ export class ProgramsD2Repository implements ProgramsRepository {
                     : []
             )
         );
-        log.info(JSON.stringify(promises.length));
+        log.info(`Retrieved ${JSON.stringify(promises.length)} requests correctly`);
 
         return promises;
     }
