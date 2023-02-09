@@ -42,9 +42,6 @@ export class ClosePatientsUseCase {
                         return {
                             ...enrollment,
                             orgUnit: realEnrollment ? realEnrollment.orgUnit : enrollment.orgUnit,
-                            orgUnitName: realEnrollment
-                                ? (realEnrollment as any).orgUnitName
-                                : enrollment.orgUnitName,
                         };
                     });
 

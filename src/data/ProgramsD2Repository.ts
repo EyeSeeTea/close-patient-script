@@ -9,7 +9,7 @@ import { D2Api } from "types/d2-api";
 import { Async } from "domain/entities/Async";
 import { TrackedEntity } from "domain/entities/TrackedEntity";
 import { Id } from "domain/entities/Base";
-import { TrackedEntityInstance } from "@eyeseetea/d2-api/api/trackedEntityInstances";
+import { TrackedEntityInstance as TrackedEntityInstanceD2Api } from "@eyeseetea/d2-api/api/trackedEntityInstances";
 import log from "utils/log";
 
 export class ProgramsD2Repository implements ProgramsRepository {
@@ -36,12 +36,12 @@ export class ProgramsD2Repository implements ProgramsRepository {
             });
     }
 
-    async getTeis(ids: Id[]): Async<any[]> {
+    async getTeis(ids: Id[]): Async<TrackedEntityInstance[]> {
         log.info(`About to send ${ids.length} requests. This can take for minutes.`);
         const promises = await this.getRealOrgUnits(ids).then(res =>
             res.flatMap(p =>
                 p.status === "fulfilled" && _.has(p.value, "enrollments")
-                    ? [p.value as TrackedEntityInstancePick]
+                    ? [p.value as TrackedEntityInstance]
                     : []
             )
         );
@@ -69,18 +69,18 @@ export class ProgramsD2Repository implements ProgramsRepository {
         return Promise.allSettled(
             ids.map(id =>
                 this.api
-                    .get<TrackedEntityInstancePick>(`trackedEntityInstances/${id}`, {
+                    .get<TrackedEntityInstance>(`trackedEntityInstances/${id}`, {
                         ouMode: "ALL",
-                        fields: "trackedEntityInstance,enrollments[enrollment,program,orgUnit,orgUnitName]",
+                        fields: "trackedEntityInstance,enrollments[enrollment,program,orgUnit]",
                         skipPaging: true,
                     })
                     .getData()
-                    .then(res => delay(3000).then(() => res))
+                    // .then(res => delay(3000).then(() => res))
                     .catch(() =>
                         this.api
-                            .get<TrackedEntityInstancePick>(`trackedEntityInstances/${id}`, {
+                            .get<TrackedEntityInstance>(`trackedEntityInstances/${id}`, {
                                 ouMode: "ALL",
-                                fields: "trackedEntityInstance,enrollments[enrollment,program,orgUnit,orgUnitName]",
+                                fields: "trackedEntityInstance,enrollments[enrollment,program,orgUnit]",
                                 skipPaging: true,
                             })
                             .getData()
@@ -119,4 +119,4 @@ function delay(t: number) {
     return new Promise(resolve => setTimeout(resolve, t));
 }
 
-export type TrackedEntityInstancePick = Pick<TrackedEntityInstance, "enrollments" | "trackedEntityInstance">;
+export type TrackedEntityInstance = Pick<TrackedEntityInstanceD2Api, "enrollments" | "trackedEntityInstance">;
