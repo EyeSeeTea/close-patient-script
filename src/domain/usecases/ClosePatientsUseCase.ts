@@ -25,33 +25,9 @@ export class ClosePatientsUseCase {
 
         const payload = await this.programsRepository
             .get({ programId, orgUnitsIds, startDate, endDate })
-            .then(async trackedEntities => ({
-                teis: await this.programsRepository.getTeis(trackedEntities.map(tei => tei.trackedEntity)), //TEMPORAL FIX
-                trackedEntities,
-            }))
-            .then(({ trackedEntities, teis }) => {
-                const fixedTrackedEntities = trackedEntities.map(entity => {
-                    const teiWithRealOrgUnits = teis.find(
-                        tei => tei.trackedEntityInstance === entity.trackedEntity
-                    );
-                    const newEnrollments = entity.enrollments.map(enrollment => {
-                        const realEnrollment = teiWithRealOrgUnits?.enrollments.find(
-                            realEnrollment => realEnrollment.enrollment === enrollment.enrollment
-                        );
-
-                        return {
-                            ...enrollment,
-                            orgUnit: realEnrollment ? realEnrollment.orgUnit : enrollment.orgUnit,
-                        };
-                    });
-
-                    return {
-                        ...entity,
-                        enrollments: newEnrollments,
-                    };
-                });
+            .then(trackedEntities => {
                 return this.filterEntities(
-                    fixedTrackedEntities,
+                    trackedEntities,
                     programId,
                     closureProgramId,
                     programStagesIds,

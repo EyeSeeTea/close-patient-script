@@ -33,21 +33,35 @@ export class ProgramsD2Repository implements ProgramsRepository {
                 const message = err?.response?.data?.message;
                 if (message) throw new Error(JSON.stringify(message));
                 else throw new Error(JSON.stringify(err));
+            })
+            .then(async trackedEntities => ({
+                teis: await this.getTeis(trackedEntities.map(tei => tei.trackedEntity)), //TEMPORAL FIX
+                trackedEntities,
+            }))
+            .then(({ trackedEntities, teis }) => {
+                const fixedTrackedEntities = trackedEntities.map(entity => {
+                    const teiWithRealOrgUnits = teis.find(
+                        tei => tei.trackedEntityInstance === entity.trackedEntity
+                    );
+                    const newEnrollments = entity.enrollments.map(enrollment => {
+                        const realEnrollment = teiWithRealOrgUnits?.enrollments.find(
+                            realEnrollment => realEnrollment.enrollment === enrollment.enrollment
+                        );
+
+                        return {
+                            ...enrollment,
+                            orgUnit: realEnrollment ? realEnrollment.orgUnit : enrollment.orgUnit,
+                        };
+                    });
+
+                    return {
+                        ...entity,
+                        enrollments: newEnrollments,
+                    };
+                });
+
+                return fixedTrackedEntities;
             });
-    }
-
-    async getTeis(ids: Id[]): Async<TrackedEntityInstance[]> {
-        log.info(`About to send ${ids.length} requests. This can take for minutes.`);
-        const promises = await this.getRealOrgUnits(ids).then(res =>
-            res.flatMap(p =>
-                p.status === "fulfilled" && _.has(p.value, "enrollments")
-                    ? [p.value as TrackedEntityInstance]
-                    : []
-            )
-        );
-        log.info(`Retrieved ${JSON.stringify(promises.length)} requests correctly`);
-
-        return promises;
     }
 
     async save(payload: ClosurePayload): Async<Stats> {
@@ -65,29 +79,44 @@ export class ProgramsD2Repository implements ProgramsRepository {
             });
     }
 
-    private getRealOrgUnits(ids: string[]) {
-        return Promise.allSettled(
-            ids.map(id =>
+    private async getTeis(ids: Id[]): Async<TrackedEntityInstance[]> {
+        log.info(`About to send ${ids.length} requests. This can take for minutes.`);
+        const promises = await this.getRealOrgUnits(ids).then(res =>
+            res.flatMap(p =>
+                p.status === "fulfilled" && _.has(p.value, "enrollments")
+                    ? [p.value as TrackedEntityInstance]
+                    : []
+            )
+        );
+        log.info(`Retrieved ${JSON.stringify(promises.length)} requests correctly`);
+
+        return promises;
+    }
+
+    private async getRealOrgUnits(ids: string[]) {
+        const teisResults: PromiseSettledResult<TrackedEntityInstance | TeiError>[] = [];
+        const params = {
+            ouMode: "ALL",
+            fields: "trackedEntityInstance,enrollments[enrollment,program,orgUnit]",
+            skipPaging: true,
+        };
+        for (const groupOfIds of _.chunk(ids, 10)) {
+            const promises = groupOfIds.map(id =>
                 this.api
-                    .get<TrackedEntityInstance>(`trackedEntityInstances/${id}`, {
-                        ouMode: "ALL",
-                        fields: "trackedEntityInstance,enrollments[enrollment,program,orgUnit]",
-                        skipPaging: true,
-                    })
+                    .get<TrackedEntityInstance>(`trackedEntityInstances/${id}`, params)
                     .getData()
-                    // .then(res => delay(3000).then(() => res))
                     .catch(() =>
                         this.api
-                            .get<TrackedEntityInstance>(`trackedEntityInstances/${id}`, {
-                                ouMode: "ALL",
-                                fields: "trackedEntityInstance,enrollments[enrollment,program,orgUnit]",
-                                skipPaging: true,
-                            })
+                            .get<TrackedEntityInstance>(`trackedEntityInstances/${id}`, params)
                             .getData()
                             .catch((err: any) => ({ id, err }))
                     )
-            )
-        );
+            );
+            const p = await Promise.allSettled(promises);
+            teisResults.push(...p);
+        }
+
+        return teisResults;
     }
 }
 
@@ -115,8 +144,9 @@ interface Report {
     message: string;
 }
 
-function delay(t: number) {
-    return new Promise(resolve => setTimeout(resolve, t));
+interface TeiError {
+    id: string;
+    err: any;
 }
 
-export type TrackedEntityInstance = Pick<TrackedEntityInstanceD2Api, "enrollments" | "trackedEntityInstance">;
+type TrackedEntityInstance = Pick<TrackedEntityInstanceD2Api, "enrollments" | "trackedEntityInstance">;

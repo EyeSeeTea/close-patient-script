@@ -1,11 +1,8 @@
-import { TrackedEntityInstance } from "data/ProgramsD2Repository";
 import { Async } from "domain/entities/Async";
-import { Id } from "domain/entities/Base";
 import { Enrollment, Event, TrackedEntity } from "domain/entities/TrackedEntity";
 
 export interface ProgramsRepository {
     get(options: GetOptions): Async<TrackedEntity[]>;
-    getTeis(ids: Id[]): Async<TrackedEntityInstance[]>;
     save(payload: ClosurePayload): Async<Stats>;
 }
 
