@@ -1,6 +1,6 @@
 {
     "name": "close-patient-script",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "main": "src/index.ts",
     "description": "Generic script to close patients from the specified DHIS2 tracker program",
     "scripts": {
