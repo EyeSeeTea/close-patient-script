@@ -1,17 +1,10 @@
 import _ from "lodash";
-import {
-    ApiGetResponse,
-    ApiPostErrorResponse,
-    ApiSaveResponse,
-    ProgramsRepository,
-    Payload,
-} from "domain/repositories/ProgramsRepository";
+import { ProgramsRepository, ClosurePayload } from "domain/repositories/ProgramsRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
 import { Pair } from "scripts/common";
 import { Enrollment, TrackedEntity } from "domain/entities/TrackedEntity";
 import log from "utils/log";
-import { CancelableResponse } from "@eyeseetea/d2-api";
 
 export class ClosePatientsUseCase {
     constructor(private programsRepository: ProgramsRepository) {}
@@ -30,11 +23,20 @@ export class ClosePatientsUseCase {
             post,
         } = options;
 
-        const payload$ = this.programsRepository
+        const payload = await this.programsRepository
             .get({ programId, orgUnitsIds, startDate, endDate })
-            .map(({ data }) => this.filterEntities(data, closureProgramId, programStagesIds, timeOfReference))
-            .map(({ data }) =>
-                this.mapPayload(data, {
+            .then(trackedEntities =>
+                this.filterEntities(
+                    trackedEntities,
+                    programId,
+                    closureProgramId,
+                    programStagesIds,
+                    timeOfReference,
+                    orgUnitsIds
+                )
+            )
+            .then(entities =>
+                this.mapPayload(entities, {
                     programStagesIds,
                     timeOfReference,
                     pairsDeValue,
@@ -43,20 +45,31 @@ export class ClosePatientsUseCase {
                 })
             );
 
-        const saveRequest$ = payload$.flatMap(({ data }) => this.programsRepository.save(data));
-        if (post) this.makeRequest(saveRequest$, post);
-        else this.makeRequest(payload$, post);
+        if (post) {
+            this.programsRepository
+                .save(payload)
+                .then(stats =>
+                    log.info(`Closed patients. Enrollments and closure events: ${JSON.stringify(stats)}`)
+                );
+        } else log.info(`Payload: ${JSON.stringify(payload)}`);
     }
 
     /* Private */
 
     private filterEntities(
-        data: ApiGetResponse,
+        trackedEntities: TrackedEntity[],
+        programId: string,
         closureProgramId: string,
         programStagesIds: string[],
-        timeOfReference: number
+        timeOfReference: number,
+        orgUnitsIds?: string[]
     ): TrackedEntity[] {
-        const entitiesWithoutClosure = this.getEntitiesWithoutClosure(data.instances, closureProgramId);
+        const entitiesWithoutClosure = this.getEntitiesWithoutClosure(
+            trackedEntities,
+            programId,
+            closureProgramId,
+            orgUnitsIds
+        );
         const filteredEntities = entitiesWithoutClosure.filter(entity => {
             const dates = this.getDatesByProgramStages(entity, programStagesIds);
             const occurredBefore = this.getRelativeDate(-timeOfReference).getTime();
@@ -65,18 +78,46 @@ export class ClosePatientsUseCase {
         return filteredEntities;
     }
 
-    private getEntitiesWithoutClosure(instances: TrackedEntity[], closureProgramId: string): TrackedEntity[] {
-        return instances.filter(entity => {
-            const enrollment = _.first(entity.enrollments);
-            return (
-                enrollment &&
-                enrollment.status !== "COMPLETED" &&
-                !enrollment.events?.some(event => event.programStage === closureProgramId && !event.deleted)
+    private getEntitiesWithoutClosure(
+        instances: TrackedEntity[],
+        programId: string,
+        closureProgramId: string,
+        orgUnitsIds?: string[]
+    ): TrackedEntity[] {
+        return instances.flatMap(entity => {
+            //New Tracker DHIS bug. TEI.enrollments.orgUnit|orgUnitName
+            const fixedOrgUnitEnrollments = entity.enrollments.flatMap(enrollment => {
+                const orgUnits = _.uniq(enrollment.events?.map(({ orgUnit }) => orgUnit));
+                const orgUnitNames = _.uniq(enrollment.events?.map(({ orgUnit }) => orgUnit));
+                if (orgUnits.length > 1 || orgUnitNames.length > 1) {
+                    log.error("ERROR: DHIS2 enrollment events have more than one orgUnit.");
+                    return [];
+                }
+                const orgUnit = _.first(orgUnits);
+                const orgUnitName = _.first(orgUnitNames);
+                if (!orgUnit || !orgUnitName) return [];
+
+                return [{ ...enrollment, orgUnit: orgUnit, orgUnitName: orgUnitName }];
+            });
+
+            const enrollments = fixedOrgUnitEnrollments.filter(({ orgUnit }) =>
+                orgUnitsIds?.includes(orgUnit)
             );
+
+            const enrollmentFromProgram = enrollments.find(enrollment => enrollment.program === programId);
+            if (
+                enrollmentFromProgram &&
+                enrollmentFromProgram.status === "ACTIVE" &&
+                !enrollmentFromProgram.events?.some(
+                    event => event.programStage === closureProgramId && !event.deleted
+                )
+            )
+                return [{ ...entity, enrollments: [enrollmentFromProgram] }];
+            else return [];
         });
     }
 
-    private mapPayload(entities: TrackedEntity[], options: MapPayloadOptions): Payload {
+    private mapPayload(entities: TrackedEntity[], options: MapPayloadOptions): ClosurePayload {
         const { programStagesIds, timeOfReference, pairsDeValue, closureProgramId, comments } = options;
         const enrollmentsWithLastDate = entities.flatMap(entity =>
             this.mapEnrollments(entity, programStagesIds)
@@ -150,38 +191,6 @@ export class ClosePatientsUseCase {
                         : dataValues,
             },
         ];
-    }
-
-    private makeRequest(request$: CancelableResponse<ApiSaveResponse | Payload>, post: boolean) {
-        request$
-            .getData()
-            .then(res =>
-                log.info(
-                    post
-                        ? `Closed patients: enrollments and closure events: ${JSON.stringify(
-                              (res as ApiSaveResponse).stats
-                          )}`
-                        : `Payload: ${JSON.stringify(res as Payload)}`
-                )
-            )
-            .catch((res: ApiPostErrorResponse) => {
-                const { data } = res.response;
-                if (data.status !== "OK") {
-                    log.error(
-                        post
-                            ? `POST /tracker: ${
-                                  data.validationReport
-                                      ? JSON.stringify(
-                                            data.validationReport?.errorReports
-                                                ?.map(({ message }) => message)
-                                                .join("\n")
-                                        )
-                                      : data.message || "Unknown error"
-                              }`
-                            : `GET /tracker/trackedEntities: ${data.message || "Unknown error"}`
-                    );
-                }
-            });
     }
 
     private getRelativeDate(timeOfReference: number, date?: number) {
