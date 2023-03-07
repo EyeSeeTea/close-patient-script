@@ -41,16 +41,18 @@ export class ClosePatientsUseCase {
                 );
             })
             .then(entities =>
-                this.reportExportRepository
-                    .save({
-                        outputPath: saveReportPath,
-                        entities,
-                        programId,
-                    })
-                    .then(() => {
-                        log.info(`Report: ${options.saveReportPath}`);
-                        return entities;
-                    })
+                _.isEmpty(entities)
+                    ? entities // (never[])
+                    : this.reportExportRepository
+                          .save({
+                              outputPath: saveReportPath,
+                              entities,
+                              programId,
+                          })
+                          .then(() => {
+                              log.info(`Report: ${options.saveReportPath}`);
+                              return entities;
+                          })
             )
             .then(entities =>
                 this.mapPayload(entities, {
