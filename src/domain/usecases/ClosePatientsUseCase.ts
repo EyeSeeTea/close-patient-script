@@ -1,13 +1,17 @@
 import _ from "lodash";
-import { ProgramsRepository, ClosurePayload } from "domain/repositories/ProgramsRepository";
+import { TrackerRepository, ClosurePayload } from "domain/repositories/TrackerRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
 import { Pair } from "scripts/common";
 import { Enrollment, TrackedEntity } from "domain/entities/TrackedEntity";
+import { ReportExportRepository } from "domain/repositories/ReportExportRepository";
 import log from "utils/log";
 
 export class ClosePatientsUseCase {
-    constructor(private programsRepository: ProgramsRepository) {}
+    constructor(
+        private programsRepository: TrackerRepository,
+        private reportExportRepository: ReportExportRepository
+    ) {}
 
     async execute(options: ClosePatientsOptions): Async<void> {
         const {
@@ -19,6 +23,7 @@ export class ClosePatientsUseCase {
             closureProgramId,
             timeOfReference,
             pairsDeValue,
+            saveReportPath,
             comments,
             post,
         } = options;
@@ -35,6 +40,20 @@ export class ClosePatientsUseCase {
                     orgUnitsIds
                 );
             })
+            .then(entities =>
+                _.isEmpty(entities)
+                    ? entities // (never[])
+                    : this.reportExportRepository
+                          .save({
+                              outputPath: saveReportPath,
+                              entities,
+                              programId,
+                          })
+                          .then(() => {
+                              log.info(`Report: ${options.saveReportPath}`);
+                              return entities;
+                          })
+            )
             .then(entities =>
                 this.mapPayload(entities, {
                     programStagesIds,
@@ -209,6 +228,7 @@ export interface ClosePatientsOptions {
     closureProgramId: Id;
     timeOfReference: number;
     pairsDeValue: Pair[];
+    saveReportPath: string;
     comments?: Pair;
     post: boolean;
 }
