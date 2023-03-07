@@ -1,7 +1,7 @@
 import { Async } from "domain/entities/Async";
 import { Enrollment, Event, TrackedEntity } from "domain/entities/TrackedEntity";
 
-export interface ProgramsRepository {
+export interface TrackerRepository {
     get(options: GetOptions): Async<TrackedEntity[]>;
     save(payload: ClosurePayload): Async<Stats>;
 }

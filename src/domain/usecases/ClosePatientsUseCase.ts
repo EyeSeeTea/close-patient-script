@@ -1,5 +1,5 @@
 import _ from "lodash";
-import { ProgramsRepository, ClosurePayload } from "domain/repositories/ProgramsRepository";
+import { TrackerRepository, ClosurePayload } from "domain/repositories/TrackerRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
 import { Pair } from "scripts/common";
@@ -9,7 +9,7 @@ import log from "utils/log";
 
 export class ClosePatientsUseCase {
     constructor(
-        private programsRepository: ProgramsRepository,
+        private programsRepository: TrackerRepository,
         private reportExportRepository: ReportExportRepository
     ) {}
 

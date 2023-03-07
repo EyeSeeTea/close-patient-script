@@ -1,18 +1,13 @@
 import _ from "lodash";
 import { TrackedEntityInstance as TrackedEntityInstanceD2Api } from "@eyeseetea/d2-api/api/trackedEntityInstances";
-import {
-    GetOptions,
-    ClosurePayload,
-    ProgramsRepository,
-    Stats,
-} from "domain/repositories/ProgramsRepository";
+import { GetOptions, ClosurePayload, TrackerRepository, Stats } from "domain/repositories/TrackerRepository";
 import { D2Api } from "types/d2-api";
 import { Async } from "domain/entities/Async";
 import { TrackedEntity } from "domain/entities/TrackedEntity";
 import { Id } from "domain/entities/Base";
 import log from "utils/log";
 
-export class ProgramsD2Repository implements ProgramsRepository {
+export class TrackerD2Repository implements TrackerRepository {
     constructor(private api: D2Api) {}
 
     async get(options: GetOptions): Async<TrackedEntity[]> {

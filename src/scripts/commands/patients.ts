@@ -8,7 +8,7 @@ import {
     StringPairSeparatedByDash,
     StringsSeparatedByCommas,
 } from "scripts/common";
-import { ProgramsD2Repository } from "data/ProgramsD2Repository";
+import { TrackerD2Repository } from "data/TrackerD2Repository";
 import { ClosePatientsUseCase } from "domain/usecases/ClosePatientsUseCase";
 import { ReportExportCsvRepository } from "data/ReportExportCsvRepository";
 
@@ -82,7 +82,7 @@ const closePatientsCmd = command({
     },
     handler: async args => {
         const api = getD2Api(args.url);
-        const programsRepository = new ProgramsD2Repository(api);
+        const programsRepository = new TrackerD2Repository(api);
         const reportExportRepository = new ReportExportCsvRepository();
 
         new ClosePatientsUseCase(programsRepository, reportExportRepository).execute(_.omit(args, ["url"]));
