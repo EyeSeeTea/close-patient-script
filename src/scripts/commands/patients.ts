@@ -10,6 +10,7 @@ import {
 } from "scripts/common";
 import { ProgramsD2Repository } from "data/ProgramsD2Repository";
 import { ClosePatientsUseCase } from "domain/usecases/ClosePatientsUseCase";
+import { ReportExportCsvRepository } from "data/ReportExportCsvRepository";
 
 export function getCommand() {
     return subcommands({
@@ -69,6 +70,11 @@ const closePatientsCmd = command({
             long: "comments",
             description: "Data element of comments with its associated value DE-Value",
         }),
+        saveReportPath: option({
+            type: string,
+            long: "save-report",
+            description: "Save report to CSV file",
+        }),
         post: flag({
             long: "post",
             description: "Send payload to DHIS2 API. If not present, shows payload.",
@@ -77,7 +83,8 @@ const closePatientsCmd = command({
     handler: async args => {
         const api = getD2Api(args.url);
         const programsRepository = new ProgramsD2Repository(api);
-        new ClosePatientsUseCase(programsRepository).execute(_.omit(args, ["url"]));
-        return;
+        const reportExportRepository = new ReportExportCsvRepository();
+
+        new ClosePatientsUseCase(programsRepository, reportExportRepository).execute(_.omit(args, ["url"]));
     },
 });
