@@ -41,6 +41,18 @@ export class ClosePatientsUseCase {
                 );
             })
             .then(entities =>
+                this.reportExportRepository
+                    .save({
+                        outputPath: saveReportPath,
+                        entities,
+                        programId,
+                    })
+                    .then(() => {
+                        log.info(`Report: ${options.saveReportPath}`);
+                        return entities;
+                    })
+            )
+            .then(entities =>
                 this.mapPayload(entities, {
                     programStagesIds,
                     timeOfReference,
@@ -49,13 +61,6 @@ export class ClosePatientsUseCase {
                     comments,
                 })
             );
-
-        if (saveReportPath) {
-            await this.reportExportRepository.save({
-                outputPath: saveReportPath,
-                payload,
-            });
-        }
 
         if (post) {
             this.programsRepository
