@@ -1,4 +1,5 @@
 import _ from "lodash";
+import { TrackedEntityInstance as TrackedEntityInstanceD2Api } from "@eyeseetea/d2-api/api/trackedEntityInstances";
 import {
     GetOptions,
     ClosurePayload,
@@ -9,7 +10,6 @@ import { D2Api } from "types/d2-api";
 import { Async } from "domain/entities/Async";
 import { TrackedEntity } from "domain/entities/TrackedEntity";
 import { Id } from "domain/entities/Base";
-import { TrackedEntityInstance as TrackedEntityInstanceD2Api } from "@eyeseetea/d2-api/api/trackedEntityInstances";
 import log from "utils/log";
 
 export class ProgramsD2Repository implements ProgramsRepository {
@@ -80,7 +80,7 @@ export class ProgramsD2Repository implements ProgramsRepository {
     }
 
     private async getTeis(ids: Id[]): Async<TrackedEntityInstance[]> {
-        log.info(`About to send ${ids.length} requests. This can take for minutes.`);
+        if (ids.length >= 1000) log.info(`About to send ${ids.length} requests. This can take for minutes.`);
         const promises = await this.getRealOrgUnits(ids).then(res =>
             res.flatMap(p =>
                 p.status === "fulfilled" && _.has(p.value, "enrollments")
@@ -88,7 +88,10 @@ export class ProgramsD2Repository implements ProgramsRepository {
                     : []
             )
         );
-        log.info(`Retrieved ${JSON.stringify(promises.length)} requests correctly`);
+
+        if (promises.length < ids.length) {
+            throw new Error(`Unable to retrieve ${JSON.stringify(promises.length)} requests.`);
+        }
 
         return promises;
     }
