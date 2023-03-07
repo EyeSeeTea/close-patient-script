@@ -28,7 +28,7 @@ shell:~$ yarn start patients close --url='http://USER:PASSWORD@localhost:8080' \
   --time-of-reference=90 \
   --pairs-de-value=B2djsn1DVCj-1,qbZ8eKRUxYT-2 \
   --comments=SoLScs3kn7E-Comment \
-  --save-report=./example-affected-patients.csv
+  --save-report=affected-patients.csv
   [--post]
 ```
 
