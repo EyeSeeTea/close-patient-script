@@ -16,6 +16,7 @@
     "dependencies": {
         "@eyeseetea/d2-api": "^1.11.0",
         "cmd-ts": "^0.10.0",
+        "csv-writer": "^1.6.0",
         "lodash": "^4.17.21"
     },
     "devDependencies": {
