@@ -1,5 +1,5 @@
 import { Async } from "domain/entities/Async";
-import { ClosurePayload } from "./ProgramsRepository";
+import { TrackedEntity } from "domain/entities/TrackedEntity";
 
 export interface ReportExportRepository {
     save(options: ReportExportSaveOptions): Async<void>;
@@ -7,5 +7,6 @@ export interface ReportExportRepository {
 
 export interface ReportExportSaveOptions {
     outputPath: string;
-    payload: ClosurePayload;
+    entities: TrackedEntity[];
+    programId: string;
 }
