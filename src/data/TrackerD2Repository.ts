@@ -61,7 +61,11 @@ export class TrackerD2Repository implements TrackerRepository {
 
     async save(payload: ClosurePayload): Async<Stats> {
         return this.api
-            .post<ApiSaveResponse & { message?: string }>("/tracker", { async: false }, payload)
+            .post<ApiSaveResponse & { message?: string }>(
+                "/tracker",
+                { async: false, reportMode: "FULL" },
+                payload
+            )
             .getData()
             .then(res => {
                 if (res.status === "OK") return res.stats;
