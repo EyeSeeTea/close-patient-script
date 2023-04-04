@@ -1,9 +1,10 @@
+import { BundleReport } from "data/TrackerD2Repository";
 import { Async } from "domain/entities/Async";
 import { Enrollment, Event, TrackedEntity } from "domain/entities/TrackedEntity";
 
 export interface TrackerRepository {
     get(options: GetOptions): Async<TrackedEntity[]>;
-    save(payload: ClosurePayload): Async<Stats>;
+    save(payload: ClosurePayload): Async<BundleReport>;
 }
 
 export interface GetOptions {
@@ -16,12 +17,4 @@ export interface GetOptions {
 export interface ClosurePayload {
     enrollments: Enrollment[];
     events: Event[];
-}
-
-export interface Stats {
-    created: number;
-    updated: number;
-    deleted: number;
-    ignored: number;
-    total: number;
 }

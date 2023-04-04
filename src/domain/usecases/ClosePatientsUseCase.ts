@@ -42,7 +42,7 @@ export class ClosePatientsUseCase {
             )
             .then(({ filteredEntities, filteredEntitiesWithEnrollmentCompleted }) =>
                 _.isEmpty(filteredEntities)
-                    ? { filteredEntities, filteredEntitiesWithEnrollmentCompleted } // (never[])
+                    ? { filteredEntities, filteredEntitiesWithEnrollmentCompleted } // {never[],[]}
                     : this.reportExportRepository
                           .save({
                               outputPath: saveReportPath,
@@ -67,21 +67,23 @@ export class ClosePatientsUseCase {
             }));
 
         if (post) {
-            this.programsRepository.save(response.payload).then(stats => {
+            this.programsRepository.save(response.payload).then(bundleReport => {
                 if (!_.isEmpty(response.filteredEntitiesWithEnrollmentCompleted))
                     log.info(
                         `Tracked entities with enrollments completed without closure: ${response.filteredEntitiesWithEnrollmentCompleted
                             .map(tei => tei.trackedEntity)
                             .join(", ")}. Count: ${response.filteredEntitiesWithEnrollmentCompleted.length}`
                     );
-                log.info(`Closed patients. Enrollments and closure events: ${JSON.stringify(stats)}`);
+                log.info(
+                    `Closed patients. Enrollments and closure events: ${JSON.stringify(bundleReport.stats)}`
+                );
                 this.reportExportRepository
                     .saveStats({
                         outputPath: saveReportPath,
-                        stats,
+                        bundleReport,
                     })
                     .then(() => {
-                        log.info(`Stats report: ${options.saveReportPath}-stats.csv`);
+                        log.info(`Stats report: ${saveReportPath.split(".csv")[0]}-stats.csv`);
                     });
             });
         } else log.info(`Payload: ${JSON.stringify(response.payload)}`);

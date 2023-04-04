@@ -36,11 +36,20 @@ export class ReportExportCsvRepository implements ReportExportRepository {
     }
 
     async saveStats(options: ReportExportSaveStatsOptions): Async<void> {
-        const { outputPath: reportPath, stats } = options;
-        const createCsvWriter = CsvWriter.createObjectCsvWriter;
+        const { outputPath: reportPath, bundleReport } = options;
         const csvHeader = _.map(statsHeaders, (obj, key) => ({ id: key, ...obj }));
-        const statsRecord = [stats].map((stats): StatsRow => _.mapValues(stats, v => "" + v));
-        const csvWriter = createCsvWriter({
+        const statsRecord: StatsRow[] = Object.values(bundleReport.typeReportMap)
+            .map(typeReport =>
+                typeReport.objectReports.map(objReport => ({
+                    uid: objReport.uid,
+                    type: objReport.trackerType,
+                    errorCodes: objReport.errorReports.map(r => r.errorCode).join(", "),
+                    messages: objReport.errorReports.map(r => r.message).join(", "),
+                }))
+            )
+            .flat(10);
+
+        const csvWriter = CsvWriter.createObjectCsvWriter({
             path: `${reportPath.split(".csv")[0]}-stats.csv`,
             header: csvHeader,
         });
@@ -50,7 +59,7 @@ export class ReportExportCsvRepository implements ReportExportRepository {
 }
 
 type Attr = "programId" | "trackedEntityId" | "orgUnitId" | "status";
-type StatsAttr = "created" | "updated" | "deleted" | "ignored" | "total";
+type StatsAttr = "uid" | "type" | "errorCodes" | "messages";
 type Row = Record<Attr, string>;
 type StatsRow = Record<StatsAttr, string>;
 
@@ -62,9 +71,8 @@ const headers: Record<Attr, { title: string }> = {
 };
 
 const statsHeaders: Record<StatsAttr, { title: string }> = {
-    created: { title: "Created" },
-    updated: { title: "Updated" },
-    deleted: { title: "Deleted" },
-    ignored: { title: "Ignored" },
-    total: { title: "Total" },
+    uid: { title: "UID" },
+    type: { title: "Type" },
+    errorCodes: { title: "Error Codes" },
+    messages: { title: "Messages" },
 };

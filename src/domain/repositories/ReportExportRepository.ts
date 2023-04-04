@@ -1,6 +1,6 @@
+import { BundleReport } from "data/TrackerD2Repository";
 import { Async } from "domain/entities/Async";
 import { TrackedEntity } from "domain/entities/TrackedEntity";
-import { Stats } from "./TrackerRepository";
 
 export interface ReportExportRepository {
     save(options: ReportExportSaveOptions): Async<void>;
@@ -16,5 +16,5 @@ export interface ReportExportSaveOptions {
 
 export interface ReportExportSaveStatsOptions {
     outputPath: string;
-    stats: Stats;
+    bundleReport: BundleReport;
 }
