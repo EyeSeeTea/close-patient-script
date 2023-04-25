@@ -1,6 +1,6 @@
 import _ from "lodash";
 import { TrackedEntityInstance as TrackedEntityInstanceD2Api } from "@eyeseetea/d2-api/api/trackedEntityInstances";
-import { GetOptions, ClosurePayload, TrackerRepository, Stats } from "domain/repositories/TrackerRepository";
+import { GetOptions, ClosurePayload, TrackerRepository } from "domain/repositories/TrackerRepository";
 import { D2Api } from "types/d2-api";
 import { Async } from "domain/entities/Async";
 import { TrackedEntity } from "domain/entities/TrackedEntity";
@@ -59,12 +59,16 @@ export class TrackerD2Repository implements TrackerRepository {
             });
     }
 
-    async save(payload: ClosurePayload): Async<Stats> {
+    async save(payload: ClosurePayload): Async<BundleReport> {
         return this.api
-            .post<ApiSaveResponse & { message?: string }>("/tracker", { async: false }, payload)
+            .post<ApiSaveResponse & { message?: string }>(
+                "/tracker",
+                { async: false, reportMode: "FULL" },
+                payload
+            )
             .getData()
             .then(res => {
-                if (res.status === "OK") return res.stats;
+                if (res.status === "OK") return res.bundleReport;
                 else throw new Error(getErrorMsg(res));
             })
             .catch(err => {
@@ -133,13 +137,62 @@ interface ApiGetResponse {
 }
 
 interface ApiSaveResponse {
-    validationReport?: { errorReports?: Report[] };
-    status: "OK" | "ERROR" | "WARNING";
+    bundleReport: BundleReport;
+    validationReport?: {
+        errorReports?: ErrorReport<"ENROLLMENT" | "EVENT" | "RELATIONSHIP" | "TRACKED_ENTITY">[];
+    };
+    timingStats: {
+        timers: {
+            commit: string;
+            preheat: string;
+            preprocess: string;
+            programrule: string;
+            programruleValidation: string;
+            totalImport: string;
+            validation: string;
+        };
+    };
+    status: Status;
     stats: Stats;
 }
 
-interface Report {
+export interface Stats {
+    created: number;
+    updated: number;
+    deleted: number;
+    ignored: number;
+    total: number;
+}
+
+export interface BundleReport {
+    stats: Stats;
+    status: Status;
+    typeReportMap: {
+        ENROLLMENT: TypeReport<"ENROLLMENT">;
+        EVENT: TypeReport<"EVENT">;
+        RELATIONSHIP: TypeReport<"RELATIONSHIP">;
+        TRACKED_ENTITY: TypeReport<"TRACKED_ENTITY">;
+    };
+}
+
+interface TypeReport<K> {
+    objectReports: ObjectReport<K>[];
+    stats: Stats;
+    trackerType: K;
+}
+
+interface ObjectReport<K> {
+    errorReports: ErrorReport<K>[];
+    index: number;
+    trackerType: K;
+    uid: Id;
+}
+
+interface ErrorReport<K> {
     message: string;
+    errorCode: string;
+    trackerType: K;
+    uid: Id;
 }
 
 interface TeiError {
@@ -147,4 +200,5 @@ interface TeiError {
     err: any;
 }
 
+type Status = "OK" | "ERROR" | "WARNING";
 type TrackedEntityInstance = Pick<TrackedEntityInstanceD2Api, "enrollments" | "trackedEntityInstance">;
