@@ -1,18 +1,13 @@
 import _ from "lodash";
-import {
-    GetOptions,
-    ClosurePayload,
-    ProgramsRepository,
-    Stats,
-} from "domain/repositories/ProgramsRepository";
+import { TrackedEntityInstance as TrackedEntityInstanceD2Api } from "@eyeseetea/d2-api/api/trackedEntityInstances";
+import { GetOptions, ClosurePayload, TrackerRepository } from "domain/repositories/TrackerRepository";
 import { D2Api } from "types/d2-api";
 import { Async } from "domain/entities/Async";
 import { TrackedEntity } from "domain/entities/TrackedEntity";
 import { Id } from "domain/entities/Base";
-import { TrackedEntityInstance as TrackedEntityInstanceD2Api } from "@eyeseetea/d2-api/api/trackedEntityInstances";
 import log from "utils/log";
 
-export class ProgramsD2Repository implements ProgramsRepository {
+export class TrackerD2Repository implements TrackerRepository {
     constructor(private api: D2Api) {}
 
     async get(options: GetOptions): Async<TrackedEntity[]> {
@@ -64,12 +59,16 @@ export class ProgramsD2Repository implements ProgramsRepository {
             });
     }
 
-    async save(payload: ClosurePayload): Async<Stats> {
+    async save(payload: ClosurePayload): Async<BundleReport> {
         return this.api
-            .post<ApiSaveResponse & { message?: string }>("/tracker", { async: false }, payload)
+            .post<ApiSaveResponse & { message?: string }>(
+                "/tracker",
+                { async: false, reportMode: "FULL" },
+                payload
+            )
             .getData()
             .then(res => {
-                if (res.status === "OK") return res.stats;
+                if (res.status === "OK") return res.bundleReport;
                 else throw new Error(getErrorMsg(res));
             })
             .catch(err => {
@@ -80,7 +79,7 @@ export class ProgramsD2Repository implements ProgramsRepository {
     }
 
     private async getTeis(ids: Id[]): Async<TrackedEntityInstance[]> {
-        log.info(`About to send ${ids.length} requests. This can take for minutes.`);
+        if (ids.length >= 1000) log.info(`About to send ${ids.length} requests. This can take for minutes.`);
         const promises = await this.getRealOrgUnits(ids).then(res =>
             res.flatMap(p =>
                 p.status === "fulfilled" && _.has(p.value, "enrollments")
@@ -88,7 +87,10 @@ export class ProgramsD2Repository implements ProgramsRepository {
                     : []
             )
         );
-        log.info(`Retrieved ${JSON.stringify(promises.length)} requests correctly`);
+
+        if (promises.length < ids.length) {
+            throw new Error(`Unable to retrieve ${JSON.stringify(promises.length)} requests.`);
+        }
 
         return promises;
     }
@@ -135,13 +137,62 @@ interface ApiGetResponse {
 }
 
 interface ApiSaveResponse {
-    validationReport?: { errorReports?: Report[] };
-    status: "OK" | "ERROR" | "WARNING";
+    bundleReport: BundleReport;
+    validationReport?: {
+        errorReports?: ErrorReport<"ENROLLMENT" | "EVENT" | "RELATIONSHIP" | "TRACKED_ENTITY">[];
+    };
+    timingStats: {
+        timers: {
+            commit: string;
+            preheat: string;
+            preprocess: string;
+            programrule: string;
+            programruleValidation: string;
+            totalImport: string;
+            validation: string;
+        };
+    };
+    status: Status;
     stats: Stats;
 }
 
-interface Report {
+export interface Stats {
+    created: number;
+    updated: number;
+    deleted: number;
+    ignored: number;
+    total: number;
+}
+
+export interface BundleReport {
+    stats: Stats;
+    status: Status;
+    typeReportMap: {
+        ENROLLMENT: TypeReport<"ENROLLMENT">;
+        EVENT: TypeReport<"EVENT">;
+        RELATIONSHIP: TypeReport<"RELATIONSHIP">;
+        TRACKED_ENTITY: TypeReport<"TRACKED_ENTITY">;
+    };
+}
+
+interface TypeReport<K> {
+    objectReports: ObjectReport<K>[];
+    stats: Stats;
+    trackerType: K;
+}
+
+interface ObjectReport<K> {
+    errorReports: ErrorReport<K>[];
+    index: number;
+    trackerType: K;
+    uid: Id;
+}
+
+interface ErrorReport<K> {
     message: string;
+    errorCode: string;
+    trackerType: K;
+    uid: Id;
 }
 
 interface TeiError {
@@ -149,4 +200,5 @@ interface TeiError {
     err: any;
 }
 
+type Status = "OK" | "ERROR" | "WARNING";
 type TrackedEntityInstance = Pick<TrackedEntityInstanceD2Api, "enrollments" | "trackedEntityInstance">;

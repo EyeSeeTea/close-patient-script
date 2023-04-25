@@ -1,11 +1,13 @@
 ## Setup
 
 The required node version is v16.14.0. Alternatively, you can run:
+
 ```console
 shell:~$ nvm use
 ```
 
 To build the script run:
+
 ```console
 shell:~$ yarn install
 shell:~$ yarn build
@@ -26,6 +28,7 @@ shell:~$ yarn start patients close --url='http://USER:PASSWORD@localhost:8080' \
   --time-of-reference=90 \
   --pairs-de-value=B2djsn1DVCj-1,qbZ8eKRUxYT-2 \
   --comments=SoLScs3kn7E-Comment \
+  --save-report=affected-patients.csv
   [--post]
 ```
 

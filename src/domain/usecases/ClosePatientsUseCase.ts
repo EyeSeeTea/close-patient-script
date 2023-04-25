@@ -1,13 +1,17 @@
 import _ from "lodash";
-import { ProgramsRepository, ClosurePayload } from "domain/repositories/ProgramsRepository";
+import { TrackerRepository, ClosurePayload } from "domain/repositories/TrackerRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
 import { Pair } from "scripts/common";
 import { Enrollment, TrackedEntity } from "domain/entities/TrackedEntity";
+import { ReportExportRepository } from "domain/repositories/ReportExportRepository";
 import log from "utils/log";
 
 export class ClosePatientsUseCase {
-    constructor(private programsRepository: ProgramsRepository) {}
+    constructor(
+        private programsRepository: TrackerRepository,
+        private reportExportRepository: ReportExportRepository
+    ) {}
 
     async execute(options: ClosePatientsOptions): Async<void> {
         const {
@@ -19,39 +23,70 @@ export class ClosePatientsUseCase {
             closureProgramId,
             timeOfReference,
             pairsDeValue,
+            saveReportPath,
             comments,
             post,
         } = options;
 
-        const payload = await this.programsRepository
+        const response = await this.programsRepository
             .get({ programId, orgUnitsIds, startDate, endDate })
-            .then(trackedEntities => {
-                return this.filterEntities(
+            .then(trackedEntities =>
+                this.filterEntities(
                     trackedEntities,
                     programId,
                     closureProgramId,
                     programStagesIds,
                     timeOfReference,
                     orgUnitsIds
-                );
-            })
-            .then(entities =>
-                this.mapPayload(entities, {
+                )
+            )
+            .then(({ filteredEntities, filteredEntitiesWithEnrollmentCompleted }) =>
+                _.isEmpty(filteredEntities)
+                    ? { filteredEntities, filteredEntitiesWithEnrollmentCompleted } // {never[],[]}
+                    : this.reportExportRepository
+                          .save({
+                              outputPath: saveReportPath,
+                              entities: filteredEntities,
+                              conflictEntities: filteredEntitiesWithEnrollmentCompleted,
+                              programId,
+                          })
+                          .then(() => {
+                              log.info(`Report: ${options.saveReportPath}`);
+                              return { filteredEntities, filteredEntitiesWithEnrollmentCompleted };
+                          })
+            )
+            .then(({ filteredEntities, filteredEntitiesWithEnrollmentCompleted }) => ({
+                payload: this.mapPayload(filteredEntities, {
                     programStagesIds,
                     timeOfReference,
                     pairsDeValue,
                     closureProgramId,
                     comments,
-                })
-            );
+                }),
+                filteredEntitiesWithEnrollmentCompleted,
+            }));
 
         if (post) {
-            this.programsRepository
-                .save(payload)
-                .then(stats =>
-                    log.info(`Closed patients. Enrollments and closure events: ${JSON.stringify(stats)}`)
+            this.programsRepository.save(response.payload).then(bundleReport => {
+                if (!_.isEmpty(response.filteredEntitiesWithEnrollmentCompleted))
+                    log.info(
+                        `Tracked entities with enrollments completed without closure: ${response.filteredEntitiesWithEnrollmentCompleted
+                            .map(tei => tei.trackedEntity)
+                            .join(", ")}. Count: ${response.filteredEntitiesWithEnrollmentCompleted.length}`
+                    );
+                log.info(
+                    `Closed patients. Enrollments and closure events: ${JSON.stringify(bundleReport.stats)}`
                 );
-        } else log.info(`Payload: ${JSON.stringify(payload)}`);
+                this.reportExportRepository
+                    .saveStats({
+                        outputPath: saveReportPath,
+                        bundleReport,
+                    })
+                    .then(() => {
+                        log.info(`Stats report: ${saveReportPath.split(".csv")[0]}-stats.csv`);
+                    });
+            });
+        } else log.info(`Payload: ${JSON.stringify(response.payload)}`);
     }
 
     /* Private */
@@ -63,19 +98,55 @@ export class ClosePatientsUseCase {
         programStagesIds: string[],
         timeOfReference: number,
         orgUnitsIds?: string[]
-    ): TrackedEntity[] {
+    ): { filteredEntities: TrackedEntity[]; filteredEntitiesWithEnrollmentCompleted: TrackedEntity[] } {
+        const entitiesWithoutClosureButEnrollmentCompleted =
+            this.getEntitiesWithoutClosureButWithEnrollmentCompleted(
+                trackedEntities,
+                programId,
+                closureProgramId,
+                orgUnitsIds
+            );
         const entitiesWithoutClosure = this.getEntitiesWithoutClosure(
             trackedEntities,
             programId,
             closureProgramId,
             orgUnitsIds
         );
-        const filteredEntities = entitiesWithoutClosure.filter(entity => {
-            const dates = this.getDatesByProgramStages(entity, programStagesIds);
-            const occurredBefore = this.getRelativeDate(-timeOfReference).getTime();
-            return dates && !_.isEmpty(dates) && Math.max(...dates, occurredBefore) === occurredBefore;
+        const [filteredEntities = [], filteredEntitiesWithEnrollmentCompleted = []] = [
+            entitiesWithoutClosure,
+            entitiesWithoutClosureButEnrollmentCompleted,
+        ].map(teisArr =>
+            teisArr.filter(entity => {
+                const dates = this.getDatesByProgramStages(entity, programStagesIds);
+                const occurredBefore = this.getRelativeDate(-timeOfReference).getTime();
+                return dates && !_.isEmpty(dates) && Math.max(...dates, occurredBefore) === occurredBefore;
+            })
+        );
+
+        return { filteredEntities, filteredEntitiesWithEnrollmentCompleted };
+    }
+
+    private getEntitiesWithoutClosureButWithEnrollmentCompleted(
+        instances: TrackedEntity[],
+        programId: string,
+        closureProgramId: string,
+        orgUnitsIds?: string[]
+    ): TrackedEntity[] {
+        return instances.flatMap(entity => {
+            const enrollments = entity.enrollments.filter(({ orgUnit }) => orgUnitsIds?.includes(orgUnit));
+
+            const enrollmentFromProgram = enrollments.find(enrollment => enrollment.program === programId);
+            if (
+                //if enrollment exist, if enrollment IS COMPLETED, if there is not event with programStage (closureId) (deleted ones not count)
+                enrollmentFromProgram &&
+                enrollmentFromProgram.status === "COMPLETED" &&
+                !enrollmentFromProgram.events?.some(
+                    event => event.programStage === closureProgramId && !event.deleted
+                )
+            )
+                return [{ ...entity, enrollments: [enrollmentFromProgram] }];
+            else return [];
         });
-        return filteredEntities;
     }
 
     private getEntitiesWithoutClosure(
@@ -89,6 +160,7 @@ export class ClosePatientsUseCase {
 
             const enrollmentFromProgram = enrollments.find(enrollment => enrollment.program === programId);
             if (
+                //if enrollment exist, if enrollment STILLS ACTIVE, if there is not event with programStage (closureId) (deleted ones not count)
                 enrollmentFromProgram &&
                 enrollmentFromProgram.status === "ACTIVE" &&
                 !enrollmentFromProgram.events?.some(
@@ -209,6 +281,7 @@ export interface ClosePatientsOptions {
     closureProgramId: Id;
     timeOfReference: number;
     pairsDeValue: Pair[];
+    saveReportPath: string;
     comments?: Pair;
     post: boolean;
 }

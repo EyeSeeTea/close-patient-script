@@ -1,6 +1,6 @@
 {
     "name": "close-patient-script",
-    "version": "0.1.2",
+    "version": "0.2.0",
     "main": "src/index.ts",
     "description": "Generic script to close patients from the specified DHIS2 tracker program",
     "scripts": {
@@ -16,6 +16,7 @@
     "dependencies": {
         "@eyeseetea/d2-api": "^1.11.0",
         "cmd-ts": "^0.10.0",
+        "csv-writer": "^1.6.0",
         "lodash": "^4.17.21"
     },
     "devDependencies": {
