@@ -20,6 +20,7 @@ export class ReportExportCsvRepository implements ReportExportRepository {
                 trackedEntityId: entity.trackedEntity,
                 orgUnitId: entity.orgUnit,
                 status: "READY",
+                comments: "",
             };
         });
 
@@ -28,7 +29,8 @@ export class ReportExportCsvRepository implements ReportExportRepository {
                 programId: programId,
                 trackedEntityId: entity.trackedEntity,
                 orgUnitId: entity.orgUnit,
-                status: "CONFLICT",
+                status: "READY",
+                comments: "COMPLETED WITHOUT CLOSURE",
             };
         });
 
@@ -58,7 +60,7 @@ export class ReportExportCsvRepository implements ReportExportRepository {
     }
 }
 
-type Attr = "programId" | "trackedEntityId" | "orgUnitId" | "status";
+type Attr = "programId" | "trackedEntityId" | "orgUnitId" | "status" | "comments";
 type StatsAttr = "uid" | "type" | "errorCodes" | "messages";
 type Row = Record<Attr, string>;
 type StatsRow = Record<StatsAttr, string>;
@@ -68,6 +70,7 @@ const headers: Record<Attr, { title: string }> = {
     trackedEntityId: { title: "Tracked Entity ID" },
     orgUnitId: { title: "Org Unit ID" },
     status: { title: "Status" },
+    comments: { title: "Comments" },
 };
 
 const statsHeaders: Record<StatsAttr, { title: string }> = {
