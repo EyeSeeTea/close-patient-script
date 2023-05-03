@@ -6,6 +6,7 @@ import { Async } from "domain/entities/Async";
 import { TrackedEntity } from "domain/entities/TrackedEntity";
 import { Id } from "domain/entities/Base";
 import log from "utils/log";
+import { Maybe } from "utils/ts-utils";
 
 export class TrackerD2Repository implements TrackerRepository {
     constructor(private api: D2Api) {}
@@ -59,7 +60,7 @@ export class TrackerD2Repository implements TrackerRepository {
             });
     }
 
-    async save(payload: ClosurePayload): Async<BundleReport> {
+    async save(payload: ClosurePayload): Async<BundleReport | Maybe<ValidationReport>> {
         return this.api
             .post<ApiSaveResponse & { message?: string }>(
                 "/tracker",
@@ -69,11 +70,11 @@ export class TrackerD2Repository implements TrackerRepository {
             .getData()
             .then(res => {
                 if (res.status === "OK") return res.bundleReport;
-                else throw new Error(getErrorMsg(res));
+                else return res.validationReport;
             })
             .catch(err => {
                 const data = err?.response?.data;
-                if (data) throw new Error(getErrorMsg(data));
+                if (data?.validationReport) return data.validationReport as ValidationReport;
                 else throw new Error(JSON.stringify(err));
             });
     }
@@ -138,9 +139,7 @@ interface ApiGetResponse {
 
 interface ApiSaveResponse {
     bundleReport: BundleReport;
-    validationReport?: {
-        errorReports?: ErrorReport<"ENROLLMENT" | "EVENT" | "RELATIONSHIP" | "TRACKED_ENTITY">[];
-    };
+    validationReport?: ValidationReport;
     timingStats: {
         timers: {
             commit: string;
@@ -154,6 +153,11 @@ interface ApiSaveResponse {
     };
     status: Status;
     stats: Stats;
+}
+
+export interface ValidationReport {
+    errorReports?: ErrorReport<"ENROLLMENT" | "EVENT" | "RELATIONSHIP" | "TRACKED_ENTITY">[];
+    warningReports?: WarningReport<"ENROLLMENT" | "EVENT" | "RELATIONSHIP" | "TRACKED_ENTITY">[];
 }
 
 export interface Stats {
@@ -188,11 +192,18 @@ interface ObjectReport<K> {
     uid: Id;
 }
 
-interface ErrorReport<K> {
+export interface Report<K> {
     message: string;
-    errorCode: string;
     trackerType: K;
     uid: Id;
+}
+
+interface ErrorReport<K> extends Report<K> {
+    errorCode: string;
+}
+
+interface WarningReport<K> extends Report<K> {
+    warningCode: string;
 }
 
 interface TeiError {

@@ -83,24 +83,39 @@ export class ClosePatientsUseCase {
             });
 
         if (post) {
-            this.programsRepository.save(response.payload).then(bundleReport => {
+            this.programsRepository.save(response.payload).then(report => {
+                const rep = report ?? {};
                 if (!_.isEmpty(response.filteredEntitiesWithEnrollmentCompleted))
                     log.info(
                         `Tracked entities with enrollments completed that had no closure: ${response.filteredEntitiesWithEnrollmentCompleted
                             .map(tei => tei.trackedEntity)
                             .join(", ")}. Count: ${response.filteredEntitiesWithEnrollmentCompleted.length}`
                     );
-                log.info(
-                    `Closed patients. Enrollments and closure events: ${JSON.stringify(bundleReport.stats)}`
-                );
-                this.reportExportRepository
-                    .saveStats({
-                        outputPath: saveReportPath,
-                        bundleReport,
-                    })
-                    .then(() => {
-                        log.info(`Stats report: ${saveReportPath.split(".csv")[0]}-stats.csv`);
-                    });
+                if ("stats" in rep) {
+                    //successful post
+                    log.info(`Closed patients. Enrollments and closure events: ${JSON.stringify(rep.stats)}`);
+                    this.reportExportRepository
+                        .saveStats({
+                            outputPath: saveReportPath,
+                            bundleReport: rep,
+                        })
+                        .then(() => {
+                            log.info(`Stats report: ${saveReportPath.split(".csv")[0]}-stats.csv`);
+                        });
+                } else {
+                    log.info(`Error while performing POST. Changes were not made.`);
+                    this.reportExportRepository
+                        .saveErrors({
+                            outputPath: saveReportPath,
+                            validationReport: rep,
+                            payload: response.payload,
+                        })
+                        .then(() => {
+                            log.info(
+                                `Errors and warnings report: ${saveReportPath.split(".csv")[0]}-stats.csv`
+                            );
+                        });
+                }
             });
         } else log.info(`Payload: ${JSON.stringify(response.payload)}`);
     }
