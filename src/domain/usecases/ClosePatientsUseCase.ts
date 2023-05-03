@@ -1,10 +1,10 @@
 import _ from "lodash";
-import { TrackerRepository, ClosurePayload } from "domain/repositories/TrackerRepository";
 import { Async } from "domain/entities/Async";
 import { Id } from "domain/entities/Base";
 import { Pair } from "scripts/common";
 import { Enrollment, TrackedEntity } from "domain/entities/TrackedEntity";
 import { ReportExportRepository } from "domain/repositories/ReportExportRepository";
+import { TrackerRepository, ClosurePayload } from "domain/repositories/TrackerRepository";
 import log from "utils/log";
 
 export class ClosePatientsUseCase {
@@ -40,51 +40,82 @@ export class ClosePatientsUseCase {
                     orgUnitsIds
                 )
             )
-            .then(({ filteredEntities, filteredEntitiesWithEnrollmentCompleted }) =>
-                _.isEmpty(filteredEntities)
-                    ? { filteredEntities, filteredEntitiesWithEnrollmentCompleted } // {never[],[]}
-                    : this.reportExportRepository
-                          .save({
-                              outputPath: saveReportPath,
-                              entities: filteredEntities,
-                              conflictEntities: filteredEntitiesWithEnrollmentCompleted,
-                              programId,
-                          })
-                          .then(() => {
-                              log.info(`Report: ${options.saveReportPath}`);
-                              return { filteredEntities, filteredEntitiesWithEnrollmentCompleted };
-                          })
-            )
-            .then(({ filteredEntities, filteredEntitiesWithEnrollmentCompleted }) => ({
-                payload: this.mapPayload(filteredEntities, {
+            .then(({ filteredEntities, filteredEntitiesWithEnrollmentCompleted }) => {
+                return this.reportExportRepository
+                    .save({
+                        outputPath: saveReportPath,
+                        entities: filteredEntities, //could be never[]
+                        conflictEntities: filteredEntitiesWithEnrollmentCompleted, //could be never[]
+                        programId,
+                    })
+                    .then(() => {
+                        log.info(`Report: ${options.saveReportPath}`);
+                        return { filteredEntities, filteredEntitiesWithEnrollmentCompleted };
+                    });
+            })
+            .then(({ filteredEntities, filteredEntitiesWithEnrollmentCompleted }) => {
+                const notCompletedEnrollmentsPayload = this.mapPayload(filteredEntities, {
                     programStagesIds,
                     timeOfReference,
                     pairsDeValue,
                     closureProgramId,
                     comments,
-                }),
-                filteredEntitiesWithEnrollmentCompleted,
-            }));
+                });
+
+                const completedEnrollmentsPayload = this.mapPayload(filteredEntitiesWithEnrollmentCompleted, {
+                    programStagesIds,
+                    timeOfReference,
+                    pairsDeValue,
+                    closureProgramId,
+                    comments,
+                });
+
+                return {
+                    payload: {
+                        enrollments: notCompletedEnrollmentsPayload.enrollments, //completedEnrollments already has COMPLETED status
+                        events: [
+                            ...notCompletedEnrollmentsPayload.events,
+                            ...completedEnrollmentsPayload.events,
+                        ],
+                    },
+                    filteredEntitiesWithEnrollmentCompleted,
+                };
+            });
 
         if (post) {
-            this.programsRepository.save(response.payload).then(bundleReport => {
+            this.programsRepository.save(response.payload).then(report => {
+                const rep = report ?? {};
                 if (!_.isEmpty(response.filteredEntitiesWithEnrollmentCompleted))
                     log.info(
-                        `Tracked entities with enrollments completed without closure: ${response.filteredEntitiesWithEnrollmentCompleted
+                        `Tracked entities with enrollments completed that had no closure: ${response.filteredEntitiesWithEnrollmentCompleted
                             .map(tei => tei.trackedEntity)
                             .join(", ")}. Count: ${response.filteredEntitiesWithEnrollmentCompleted.length}`
                     );
-                log.info(
-                    `Closed patients. Enrollments and closure events: ${JSON.stringify(bundleReport.stats)}`
-                );
-                this.reportExportRepository
-                    .saveStats({
-                        outputPath: saveReportPath,
-                        bundleReport,
-                    })
-                    .then(() => {
-                        log.info(`Stats report: ${saveReportPath.split(".csv")[0]}-stats.csv`);
-                    });
+                if ("stats" in rep) {
+                    //successful post
+                    log.info(`Closed patients. Enrollments and closure events: ${JSON.stringify(rep.stats)}`);
+                    this.reportExportRepository
+                        .saveStats({
+                            outputPath: saveReportPath,
+                            bundleReport: rep,
+                        })
+                        .then(() => {
+                            log.info(`Stats report: ${saveReportPath.split(".csv")[0]}-stats.csv`);
+                        });
+                } else {
+                    log.info(`Error while performing POST. Changes were not made.`);
+                    this.reportExportRepository
+                        .saveErrors({
+                            outputPath: saveReportPath,
+                            validationReport: rep,
+                            payload: response.payload,
+                        })
+                        .then(() => {
+                            log.info(
+                                `Errors and warnings report: ${saveReportPath.split(".csv")[0]}-stats.csv`
+                            );
+                        });
+                }
             });
         } else log.info(`Payload: ${JSON.stringify(response.payload)}`);
     }
@@ -137,7 +168,7 @@ export class ClosePatientsUseCase {
 
             const enrollmentFromProgram = enrollments.find(enrollment => enrollment.program === programId);
             if (
-                //if enrollment exist, if enrollment IS COMPLETED, if there is not event with programStage (closureId) (deleted ones not count)
+                //if enrollment exist, if enrollment IS COMPLETED, if there is no event with programStage (closureId) (deleted ones doesn't count)
                 enrollmentFromProgram &&
                 enrollmentFromProgram.status === "COMPLETED" &&
                 !enrollmentFromProgram.events?.some(
@@ -160,7 +191,7 @@ export class ClosePatientsUseCase {
 
             const enrollmentFromProgram = enrollments.find(enrollment => enrollment.program === programId);
             if (
-                //if enrollment exist, if enrollment STILLS ACTIVE, if there is not event with programStage (closureId) (deleted ones not count)
+                //if enrollment exist, if enrollment STILLS ACTIVE, if there is no event with programStage (closureId) (deleted ones doesn't count)
                 enrollmentFromProgram &&
                 enrollmentFromProgram.status === "ACTIVE" &&
                 !enrollmentFromProgram.events?.some(
